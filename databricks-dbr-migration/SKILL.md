@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
-  databricks-skill-version: "3.2.0"
+  databricks-skill-version: "3.6.0"
   databricks-skill-category: platform-migration
   databricks-skill-last-updated: "2026-01-26"
 allowed-tools: Read Write Bash(grep:*) Bash(find:*) Bash(python:*)
@@ -21,6 +21,68 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 2. **FIX** - Apply automatic remediations (7 patterns)
 3. **FLAG** - Explicitly flag items requiring manual review (6 patterns) or configuration testing (4 patterns)
 4. **VALIDATE** - Verify fixes are correct
+5. **SUMMARIZE** - Add a summary markdown cell to the notebook
+
+---
+
+## CRITICAL: Add Summary as Markdown Cell
+
+**After scanning or fixing, ALWAYS add a summary as a NEW MARKDOWN CELL at the end of the notebook:**
+
+### For SCAN Results - Add This Markdown Cell:
+
+````markdown
+# MAGIC %md
+# MAGIC ## 📋 DBR Migration Scan Results
+# MAGIC 
+# MAGIC **Scan Date:** YYYY-MM-DD HH:MM  
+# MAGIC **Target DBR Version:** 17.3
+# MAGIC 
+# MAGIC ### Summary
+# MAGIC | Category | Count |
+# MAGIC |----------|-------|
+# MAGIC | 🔴 Auto-Fix | X |
+# MAGIC | 🟡 Manual Review | Y |
+# MAGIC | ⚙️ Config Check | Z |
+# MAGIC 
+# MAGIC ### 🔴 Auto-Fix Required
+# MAGIC | Line | BC-ID | Pattern | Fix |
+# MAGIC |------|-------|---------|-----|
+# MAGIC | 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |
+# MAGIC 
+# MAGIC ### 🟡 Manual Review Required
+# MAGIC | Line | BC-ID | Issue | Action |
+# MAGIC |------|-------|-------|--------|
+# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | Add UUID to view names |
+# MAGIC 
+# MAGIC ### ⚙️ Config Check (Test First)
+# MAGIC | Line | BC-ID | Issue | Config If Needed |
+# MAGIC |------|-------|-------|------------------|
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC 
+# MAGIC ### Next Steps
+# MAGIC 1. Run: `@databricks-dbr-migration fix all auto-fixable issues`
+# MAGIC 2. Review manual items above
+# MAGIC 3. Test config changes on DBR 17.3
+````
+
+### Example Agent Action
+After scanning, add a new cell at the end of the notebook with the scan summary.
+
+---
+
+## CRITICAL: Target Version Awareness
+
+**IMPORTANT:** When the user specifies a target DBR version, filter findings accordingly:
+
+| Target Version | Skip These Patterns |
+|----------------|---------------------|
+| **17.3** or **16.4** | Skip `BC-15.4-001` (VariantType in UDF) - **FIXED in 16.4** |
+| **15.4** | Flag ALL patterns including BC-15.4-001 |
+
+**Example:** If user says "check compatibility for DBR 17.3" or "upgrade to 16.4":
+- ✅ Do NOT flag `VariantType()` in UDFs (BC-15.4-001) - it works in 16.4+
+- ✅ Still flag all other patterns
 
 ---
 
@@ -46,7 +108,7 @@ When scanning code, categorize ALL findings into these three categories and hand
 
 | ID | Pattern | Flag Message |
 |----|---------|--------------|
-| BC-15.4-001 | `VariantType()` in UDF | **FLAG:** VARIANT UDFs fail on DBR 15.4 only. If upgrading to 16.4+, no action needed. For 15.4, use `StringType` + `json.dumps()` |
+| BC-15.4-001 | `VariantType()` in UDF | **⚠️ SKIP if target is 16.4+ or 17.3** - VARIANT UDFs work in 16.4+. Only flag if target is 15.4. |
 | BC-15.4-004 | `CREATE VIEW (col TYPE)` | **FLAG:** Column types in VIEW not allowed in 15.4+. Remove types, use CAST in SELECT |
 | BC-SC-001 | try/except around DataFrame transforms | **FLAG:** In Spark Connect, errors appear at action time, not transform time. Add `_ = df.columns` after transforms for early validation |
 | BC-SC-002 | Same temp view name used multiple times | **FLAG:** In Spark Connect, view name reuse causes data conflicts. Add UUID: `f"view_{uuid.uuid4().hex[:8]}"` |
@@ -113,11 +175,11 @@ Search for each pattern and report findings:
 grep -rn "input_file_name\s*(" --include="*.py" --include="*.sql" --include="*.scala" /path/to/scan
 ```
 
-**BC-15.4-001: VARIANT in Python UDF [FAILS in 15.4 only, FIXED in 16.4]**
+**BC-15.4-001: VARIANT in Python UDF [SKIP if target is 16.4+ or 17.3]**
 ```bash
 grep -rn "VariantType" --include="*.py" /path/to/scan
 ```
-> ✅ Note: VARIANT UDFs now work in DBR 16.4+!
+> ⚠️ **SKIP THIS CHECK** if user's target version is 16.4 or 17.3 - VARIANT UDFs work in 16.4+!
 
 **BC-16.4-001: Scala JavaConverters [DEPRECATED in 16.4]**
 ```bash
@@ -140,8 +202,10 @@ grep -rn "\.to\[" --include="*.scala" /path/to/scan
 
 ### Step 3: Search for MANUAL REVIEW Patterns
 
-**BC-15.4-001: VARIANT in UDF (15.4 only - works in 16.4+)**
+**BC-15.4-001: VARIANT in UDF [SKIP if target is 16.4+ or 17.3]**
+> ⚠️ **Only scan for this if target version is 15.4.** Skip if upgrading to 16.4 or 17.3.
 ```bash
+# Only run this if target is 15.4:
 grep -rn "VariantType\s*(" --include="*.py" /path/to/scan
 ```
 
@@ -231,11 +295,74 @@ Format findings as:
 - ⚙️ CONFIG CHECK: W findings (test first)
 ```
 
+### Step 6: Add Scan Summary as Markdown Cell
+
+**ALWAYS add the scan results as a new markdown cell at the end of the notebook:**
+
+- Add a new cell with `# MAGIC %md` prefix
+- Include scan date and target DBR version
+- Include summary table with counts by category
+- Include detailed findings tables
+- Include next steps for the developer
+
+**Example:** See the markdown cell format in the "CRITICAL: Add Summary as Markdown Cell" section above.
+
 ---
 
 ## Capability 2: FIX - Apply Automatic Remediations
 
-When user asks to fix breaking changes, apply these transformations:
+When user asks to fix breaking changes, apply these transformations.
+
+### CRITICAL: Add Fix Summary as Markdown Cell
+
+**After applying fixes, ALWAYS add a summary as a NEW MARKDOWN CELL at the end of the notebook:**
+
+### For FIX Results - Add This Markdown Cell:
+
+````markdown
+# MAGIC %md
+# MAGIC ## ✅ DBR Migration Fix Summary
+# MAGIC 
+# MAGIC **Fix Date:** YYYY-MM-DD HH:MM  
+# MAGIC **Target DBR Version:** 17.3
+# MAGIC 
+# MAGIC ### Summary
+# MAGIC | Status | Count |
+# MAGIC |--------|-------|
+# MAGIC | ✅ Fixed | X |
+# MAGIC | 🟡 Manual Review (unchanged) | Y |
+# MAGIC | ⚙️ Config Check (unchanged) | Z |
+# MAGIC 
+# MAGIC ### ✅ Changes Applied
+# MAGIC 
+# MAGIC #### BC-17.3-001: input_file_name() → _metadata.file_name
+# MAGIC | Line | Before | After |
+# MAGIC |------|--------|-------|
+# MAGIC | 5 | `from pyspark.sql.functions import input_file_name` | (removed) |
+# MAGIC | 42 | `input_file_name()` | `col("_metadata.file_name")` |
+# MAGIC 
+# MAGIC #### BC-15.4-003: ! → NOT
+# MAGIC | Line | Before | After |
+# MAGIC |------|--------|-------|
+# MAGIC | 15 | `IF ! EXISTS` | `IF NOT EXISTS` |
+# MAGIC | 28 | `IS ! NULL` | `IS NOT NULL` |
+# MAGIC 
+# MAGIC ### 🟡 Manual Review Still Required
+# MAGIC | Line | BC-ID | Issue | Action Needed |
+# MAGIC |------|-------|-------|---------------|
+# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | Add UUID to view names |
+# MAGIC 
+# MAGIC ### ⚙️ Config Check Still Required
+# MAGIC | Line | BC-ID | Issue | Test Then Add |
+# MAGIC |------|-------|-------|---------------|
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | Test performance first |
+# MAGIC 
+# MAGIC ### Next Steps
+# MAGIC 1. Review the changes above
+# MAGIC 2. Address manual review items
+# MAGIC 3. Test on DBR 17.3
+# MAGIC 4. Run: `@databricks-dbr-migration validate all fixes`
+````
 
 ### Multi-File Fix Strategy
 
@@ -301,9 +428,10 @@ df.select(col("*"), col("_metadata.file_name").as("source"))
 | ` ! LIKE ` | ` NOT LIKE ` |
 | ` ! EXISTS` | ` NOT EXISTS` |
 
-### Fix BC-15.4-001: VARIANT in Python UDF (15.4 only)
+### Fix BC-15.4-001: VARIANT in Python UDF
 
-> ✅ **No fix needed for DBR 16.4+** - VARIANT UDFs now work! See [official docs](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf).
+> ⚠️ **SKIP if target is 16.4+ or 17.3** - No fix needed! VARIANT UDFs work in 16.4+.
+> See [official docs](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf).
 
 **For DBR 15.4 only - Convert VARIANT UDF to STRING with JSON:**
 ```python
@@ -357,21 +485,22 @@ Use the file editing tool to apply changes:
 1. Read the file content
 2. Apply the transformation
 3. Write the updated content
-4. Report the change made
+4. **Track each change made** (line, before, after)
+5. **Add fix summary as a new markdown cell at end of notebook**
+6. Report to user
 
-**Example fix report:**
+**After all fixes are applied, add a summary cell and report:**
 ```
-## Fixes Applied
+✅ Fixes applied!
 
-### file.py
-- Line 5: Removed `from pyspark.sql.functions import input_file_name`
-- Line 42: Changed `input_file_name()` to `_metadata.file_name`
+Changes made:
+- ✅ 4 fixes applied
+- 🟡 1 item still needs manual review
+- ⚙️ 1 item needs config testing
 
-### query.sql  
-- Line 15: Changed `IF ! EXISTS` to `IF NOT EXISTS`
-- Line 28: Changed `IS ! NULL` to `IS NOT NULL`
+📋 Summary added as new cell at end of notebook.
 
-Total: 4 fixes in 2 files
+Run `@databricks-dbr-migration validate all fixes` to verify.
 ```
 
 ---
@@ -453,7 +582,7 @@ All breaking changes resolved
 | ID | Severity | Pattern | Fix |
 |----|----------|---------|-----|
 | BC-17.3-001 | HIGH | `input_file_name()` | `_metadata.file_name` |
-| BC-15.4-001 | LOW | `VariantType` in Python UDF *(15.4 only - fixed in 16.4)* | Upgrade to 16.4+ or use STRING + JSON |
+| BC-15.4-001 | **SKIP** | `VariantType` in Python UDF | **Skip if target is 16.4+/17.3** - only an issue on 15.4 |
 | BC-16.4-001 | HIGH | `JavaConverters` | `CollectionConverters` |
 | BC-13.3-001 | HIGH | MERGE/UPDATE overflow | Widen column type |
 | BC-15.4-003 | MEDIUM | `IF !`, `IS !`, `! IN` | Use `NOT` |
@@ -583,29 +712,59 @@ IF SLOWER: Add `.option("cloudFiles.useIncrementalListing", "auto")`
 No automatic fix applied - testing required first.
 ```
 
-### 6. VALIDATE and REPORT
+### 6. ADD SCAN SUMMARY as Markdown Cell
+
+**Add a new markdown cell at the end of the notebook with the scan summary:**
+
+```python
+# MAGIC %md
+# MAGIC ## 📋 DBR Migration Scan Results
+# MAGIC 
+# MAGIC **Scan Date:** 2026-01-26 10:30  
+# MAGIC **Target DBR Version:** 17.3
+# MAGIC 
+# MAGIC ### Summary
+# MAGIC | Category | Count |
+# MAGIC |----------|-------|
+# MAGIC | 🔴 Auto-Fix | 1 |
+# MAGIC | 🟡 Manual Review | 1 |
+# MAGIC | ⚙️ Config Check | 1 |
+# MAGIC 
+# MAGIC ### 🔴 Auto-Fix Required
+# MAGIC | Line | BC-ID | Pattern | Fix |
+# MAGIC |------|-------|---------|-----|
+# MAGIC | 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |
+# MAGIC 
+# MAGIC ### 🟡 Manual Review Required
+# MAGIC | Line | BC-ID | Issue | Action |
+# MAGIC |------|-------|-------|--------|
+# MAGIC | 55,85 | BC-SC-002 | Temp view "batch" reused | Add UUID |
+# MAGIC 
+# MAGIC ### ⚙️ Config Check (Test First)
+# MAGIC | Line | BC-ID | Issue | Config If Needed |
+# MAGIC |------|-------|-------|------------------|
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC 
+# MAGIC ### Next Steps
+# MAGIC 1. Run: `@databricks-dbr-migration fix all auto-fixable issues`
+# MAGIC 2. Review manual items above
+# MAGIC 3. Test config changes on DBR 17.3
 ```
-## Migration Report for ./notebooks/
 
-### ✅ Fixed (1 item)
-- BC-17.3-001 in etl_job.py:42 - Replaced input_file_name() with _metadata.file_name
+### 7. REPORT to User
 
-### 🟡 Flagged for Manual Review (1 item)
-- BC-SC-002 in etl_job.py:55,85 - Temp view "batch" reused
-  - Risk: Data conflicts in Spark Connect
-  - Fix: Add UUID to view names
-  - Status: Awaiting developer decision
+After adding the summary cell, tell the user:
+```
+✅ Scan complete! 
 
-### ⚙️ Flagged for Config Testing (1 item)
-- BC-17.3-002 in streaming.py:30 - Auto Loader default changed
-  - Action: Test performance, add explicit config if needed
-  - Status: No change made (test first)
+📋 Summary added as new cell at end of notebook.
 
-### Summary
-- Files scanned: 2
-- 🔴 Auto-fixed: 1
-- 🟡 Manual review: 1
-- ⚙️ Config check: 1
+Summary:
+- 🔴 Auto-fixable: 1 issue
+- 🟡 Manual review: 1 issue  
+- ⚙️ Config check: 1 issue
+
+Run `@databricks-dbr-migration fix all auto-fixable issues` to apply fixes.
 ```
 
 ---

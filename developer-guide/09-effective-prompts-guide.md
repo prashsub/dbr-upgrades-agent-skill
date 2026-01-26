@@ -113,39 +113,65 @@ What skills do you have access to?
 
 > ⚠️ **Before proceeding:** Ensure you've completed the [Prerequisites](#️-prerequisites-skill-installation) section above!
 
+> 💡 **Tip:** Replace `{your-email}` with your actual Databricks email (e.g., `john.doe@company.com`)
+
 ### 🔍 Initial Assessment
 
+**Option A: If skill is installed in ~/.assistant/skills/**
 ```
-@databricks-dbr-migration scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
+```
+
+**Option B: If using skill directly from this repo (recommended for testing)**
+```
+Using the DBR migration skill at ./databricks-dbr-migration/SKILL.md, scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
 ```
 
 ```
-@databricks-dbr-migration analyze this folder for DBR 17.3 compatibility issues
+Using the DBR migration skill at ./databricks-dbr-migration/SKILL.md, analyze this folder for DBR 17.3 compatibility issues
 ```
 
 ### 🔧 Quick Fix
 
 ```
-@databricks-dbr-migration fix all breaking changes in this notebook
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, fix all breaking changes in this notebook
 ```
 
 ```
-@databricks-dbr-migration fix the input_file_name() issues you found
+Using the skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, fix the input_file_name() issues you found
 ```
 
 ### ✅ Validation
 
 ```
-@databricks-dbr-migration validate that all breaking changes have been fixed
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, validate that all breaking changes have been fixed
+```
+
+### 📝 Shorthand (After First Use)
+
+Once the agent has loaded the skill, you can use shorter prompts:
+```
+@databricks-dbr-migration scan this notebook for DBR 17.3 breaking changes
+```
+
+```
+@databricks-dbr-migration fix all auto-fixable issues
 ```
 
 ---
 
 ## Scanning Prompts
 
+> 💡 **First-time use:** Include the full skill path. After the skill is loaded, you can use `@databricks-dbr-migration` shorthand.
+
 ### Single File Scans
 
-**Scan current notebook:**
+**Scan current notebook (first time - include skill path):**
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan this notebook for all breaking changes from DBR 13.3 to 17.3
+```
+
+**Scan current notebook (after skill is loaded):**
 ```
 @databricks-dbr-migration scan this notebook for all breaking changes from DBR 13.3 to 17.3
 ```
@@ -522,10 +548,13 @@ What skills do you have access to?
 
 ## Prompt Templates
 
-### Template 1: Full Migration Workflow
+> 💡 **Copy-paste ready!** Replace `{your-email}` with your Databricks email address.
+
+### Template 1: Full Migration Workflow (First Use)
 
 ```
-@databricks-dbr-migration 
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/:
+
 1. Scan this folder (including subdirectories) for all breaking changes from DBR 13.3 to 17.3
 2. Categorize findings into: auto-fix, manual review, and configuration
 3. Apply all automatic fixes
@@ -536,16 +565,17 @@ What skills do you have access to?
 5. Validate that all auto-fixable issues are resolved
 ```
 
-### Template 2: Quick Notebook Fix
+### Template 2: Quick Notebook Fix (First Use)
 
 ```
-@databricks-dbr-migration scan this notebook for DBR 17.3 breaking changes, fix all auto-fixable issues, and validate the fixes were applied correctly
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan this notebook for DBR 17.3 breaking changes, fix all auto-fixable issues, and validate the fixes were applied correctly
 ```
 
 ### Template 3: Multi-File Project Scan
 
 ```
-@databricks-dbr-migration 
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/:
+
 Scan this project folder recursively:
 - Include all .py files (main notebooks and utility modules)
 - Check for breaking changes when upgrading to DBR 17.3
@@ -556,12 +586,24 @@ Scan this project folder recursively:
 ### Template 4: Specific Issue Focus
 
 ```
-@databricks-dbr-migration 
+Using the skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/:
+
 Focus on [input_file_name / Spark Connect / Scala 2.13] issues:
 - Scan this [file/folder]
 - Show all occurrences with line numbers
 - Explain the fix for each occurrence
 - Apply fixes if safe to do so
+```
+
+### Template 5: Follow-up Prompts (After Skill is Loaded)
+
+Once the skill is loaded in your session, you can use shorter prompts:
+```
+@databricks-dbr-migration fix all breaking changes in this notebook
+```
+
+```
+@databricks-dbr-migration validate no breaking patterns remain
 ```
 
 ---
@@ -590,40 +632,49 @@ What agent skills are currently available?
 2. Verify SKILL.md: `cat ~/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5`
 3. Restart Databricks Assistant
 
-### Using @-mentions
+### Using the Skill
 
-Always prefix your prompt with the skill name:
+#### First Time Use (Important!)
+
+On first use, **always include the full skill path** so the agent knows where to find it:
+
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan this notebook for breaking changes
+```
+
+#### After Skill is Loaded
+
+Once the agent has loaded the skill in your session, you can use the @-mention shorthand:
 ```
 @databricks-dbr-migration [your prompt here]
 ```
 
 > ⚠️ **Important:** The skill name is `databricks-dbr-migration` (with hyphens), not `dbr-migration`
 
-**Test the @-mention:**
+**Test the skill is loaded:**
 ```
 @databricks-dbr-migration hello, are you working?
 ```
 
-**Expected response:** The agent should acknowledge and describe its capabilities.
+**Expected response:** The agent should acknowledge and describe its capabilities (SCAN, FIX, FLAG, VALIDATE).
 
 ### In Databricks Notebooks
 
-**Cell magic:**
-```python
-# In a notebook cell
-@databricks-dbr-migration scan this notebook for breaking changes
+**First prompt (include skill path):**
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
 ```
 
-**Multi-cell workflow:**
+**Multi-cell workflow (after skill is loaded):**
 ```python
-# Cell 1: Scan
-@databricks-dbr-migration scan for breaking changes
+# Cell 1: Scan (first time - include skill path)
+# "Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan for breaking changes"
 
-# Cell 2: Review findings, then fix
-@databricks-dbr-migration fix all auto-fixable issues
+# Cell 2: Review findings, then fix (skill already loaded)
+# "@databricks-dbr-migration fix all auto-fixable issues"
 
-# Cell 3: Validate
-@databricks-dbr-migration validate all fixes
+# Cell 3: Validate (skill already loaded)
+# "@databricks-dbr-migration validate all fixes"
 ```
 
 ### In Databricks Workspace Files
@@ -757,15 +808,27 @@ If `databricks-dbr-migration` is not listed, reinstall using Solution 2.
 
 ## Quick Reference Card
 
-**Scan:** `@databricks-dbr-migration scan [target] for DBR 17.3 breaking changes`
+### First Use (Include Skill Path)
 
-**Fix:** `@databricks-dbr-migration fix all [auto-fixable/specific BC-ID] issues`
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, [your request]
+```
 
-**Validate:** `@databricks-dbr-migration validate all fixes were applied correctly`
+### After Skill is Loaded (Shorthand)
 
-**Report:** `@databricks-dbr-migration create detailed migration report`
+| Action | Prompt |
+|--------|--------|
+| **Scan** | `@databricks-dbr-migration scan [target] for DBR 17.3 breaking changes` |
+| **Fix** | `@databricks-dbr-migration fix all [auto-fixable/specific BC-ID] issues` |
+| **Validate** | `@databricks-dbr-migration validate all fixes were applied correctly` |
+| **Report** | `@databricks-dbr-migration create detailed migration report` |
+| **Help** | `@databricks-dbr-migration explain [breaking change ID or pattern]` |
 
-**Help:** `@databricks-dbr-migration explain [breaking change ID or pattern]`
+### Example First-Time Prompt (Copy-Paste Ready)
+
+```
+Using the DBR migration skill at /Workspace/Users/prashanth.subrahmanyam@databricks.com/.assistant/skills/databricks-dbr-migration/, scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3, categorize them into auto-fix, manual review, and config changes, then fix all auto-fixable issues
+```
 
 ---
 

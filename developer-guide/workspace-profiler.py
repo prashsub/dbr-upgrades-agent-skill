@@ -18,6 +18,47 @@
 
 # MAGIC %md
 # MAGIC ## Configuration
+# MAGIC 
+# MAGIC ### Quick Testing Examples
+# MAGIC 
+# MAGIC **Test with just 5 jobs and 10 notebooks:**
+# MAGIC ```python
+# MAGIC CONFIG["max_jobs"] = 5
+# MAGIC CONFIG["max_notebooks"] = 10
+# MAGIC ```
+# MAGIC 
+# MAGIC **Dry run to count files without scanning:**
+# MAGIC ```python
+# MAGIC CONFIG["dry_run"] = True
+# MAGIC ```
+# MAGIC 
+# MAGIC **Scan specific folder only:**
+# MAGIC ```python
+# MAGIC CONFIG["scan_jobs"] = False
+# MAGIC CONFIG["workspace_paths"] = ["/Users/your.name/project"]
+# MAGIC CONFIG["max_notebooks"] = 20
+# MAGIC ```
+# MAGIC 
+# MAGIC ### Checkpointing (Resume Failed Scans)
+# MAGIC 
+# MAGIC **Enable checkpointing (default):**
+# MAGIC ```python
+# MAGIC CONFIG["enable_checkpointing"] = True
+# MAGIC CONFIG["checkpoint_table"] = "scan_checkpoint"  # Table in same catalog.schema
+# MAGIC ```
+# MAGIC 
+# MAGIC **Resume a failed scan:**
+# MAGIC ```python
+# MAGIC # Find the scan_id from the failed run's output, then set it before running:
+# MAGIC SCAN_ID = "20260125_143022"  # Replace with actual scan_id from failed run
+# MAGIC ```
+# MAGIC 
+# MAGIC **Clear checkpoints and start fresh:**
+# MAGIC ```python
+# MAGIC clear_checkpoint()  # Clears all
+# MAGIC # or
+# MAGIC clear_checkpoint("20260125_143022")  # Clears specific scan
+# MAGIC ```
 
 # COMMAND ----------
 
@@ -46,6 +87,21 @@ CONFIG = {
     
     # Target DBR version
     "target_dbr_version": "17.3",
+    
+    # ============================================================
+    # TESTING/DEVELOPMENT LIMITS (set to None for full scan)
+    # ============================================================
+    "max_jobs": None,                   # Max jobs to scan (e.g., 5 for testing, None for all)
+    "max_notebooks": None,              # Max notebooks to scan per workspace path (e.g., 10 for testing)
+    "dry_run": False,                   # If True, just count files without scanning content
+    "verbose": True,                    # Print detailed progress
+    
+    # ============================================================
+    # CHECKPOINTING (for resumable scans)
+    # ============================================================
+    "enable_checkpointing": True,       # Enable checkpoint to resume failed scans
+    "checkpoint_table": "scan_checkpoint",  # Table name for checkpoints (in same catalog.schema)
+    "checkpoint_batch_size": 10,        # Save checkpoint every N items scanned
 }
 
 # COMMAND ----------
@@ -254,6 +310,132 @@ BREAKING_PATTERNS = [
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Checkpointing Functions
+
+# COMMAND ----------
+
+def get_checkpoint_table_name() -> str:
+    """Get the full checkpoint table name."""
+    return f"{CONFIG['output_catalog']}.{CONFIG['output_schema']}.{CONFIG['checkpoint_table']}"
+
+def initialize_checkpoint_table():
+    """Create the checkpoint table if it doesn't exist."""
+    if not CONFIG.get("enable_checkpointing", False):
+        return
+    
+    checkpoint_table = get_checkpoint_table_name()
+    
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {checkpoint_table} (
+            scan_id STRING,
+            item_type STRING,
+            item_id STRING,
+            item_path STRING,
+            status STRING,
+            scanned_at TIMESTAMP,
+            error_message STRING
+        )
+        USING DELTA
+    """)
+    print(f"✅ Checkpoint table ready: {checkpoint_table}")
+
+def get_completed_items(scan_id: str, item_type: str) -> set:
+    """Get set of already scanned items from checkpoint."""
+    if not CONFIG.get("enable_checkpointing", False):
+        return set()
+    
+    checkpoint_table = get_checkpoint_table_name()
+    
+    try:
+        df = spark.sql(f"""
+            SELECT item_id 
+            FROM {checkpoint_table}
+            WHERE scan_id = '{scan_id}' 
+              AND item_type = '{item_type}'
+              AND status = 'completed'
+        """)
+        return set(row.item_id for row in df.collect())
+    except:
+        return set()
+
+def save_checkpoint(scan_id: str, item_type: str, item_id: str, item_path: str, status: str = "completed", error: str = None):
+    """Save a checkpoint for a scanned item."""
+    if not CONFIG.get("enable_checkpointing", False):
+        return
+    
+    checkpoint_table = get_checkpoint_table_name()
+    
+    # Use SQL INSERT for simplicity
+    error_escaped = error.replace("'", "''") if error else ""
+    path_escaped = item_path.replace("'", "''") if item_path else ""
+    
+    spark.sql(f"""
+        INSERT INTO {checkpoint_table}
+        VALUES (
+            '{scan_id}',
+            '{item_type}',
+            '{item_id}',
+            '{path_escaped}',
+            '{status}',
+            current_timestamp(),
+            '{error_escaped}'
+        )
+    """)
+
+def save_checkpoints_batch(scan_id: str, items: list):
+    """Save multiple checkpoints at once (more efficient)."""
+    if not CONFIG.get("enable_checkpointing", False) or not items:
+        return
+    
+    checkpoint_table = get_checkpoint_table_name()
+    
+    # Create DataFrame from items
+    from pyspark.sql.functions import current_timestamp, lit
+    
+    df = spark.createDataFrame(items)
+    df = df.withColumn("scan_id", lit(scan_id)) \
+           .withColumn("scanned_at", current_timestamp())
+    
+    df.write.format("delta").mode("append").saveAsTable(checkpoint_table)
+
+def get_scan_progress(scan_id: str) -> dict:
+    """Get progress summary for a scan."""
+    if not CONFIG.get("enable_checkpointing", False):
+        return {}
+    
+    checkpoint_table = get_checkpoint_table_name()
+    
+    try:
+        df = spark.sql(f"""
+            SELECT 
+                item_type,
+                status,
+                COUNT(*) as count
+            FROM {checkpoint_table}
+            WHERE scan_id = '{scan_id}'
+            GROUP BY item_type, status
+        """)
+        return {f"{row.item_type}_{row.status}": row['count'] for row in df.collect()}
+    except:
+        return {}
+
+def clear_checkpoint(scan_id: str = None):
+    """Clear checkpoints for a scan (or all if scan_id is None)."""
+    if not CONFIG.get("enable_checkpointing", False):
+        return
+    
+    checkpoint_table = get_checkpoint_table_name()
+    
+    if scan_id:
+        spark.sql(f"DELETE FROM {checkpoint_table} WHERE scan_id = '{scan_id}'")
+        print(f"🗑️ Cleared checkpoints for scan: {scan_id}")
+    else:
+        spark.sql(f"DELETE FROM {checkpoint_table}")
+        print(f"🗑️ Cleared all checkpoints")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Scanning Functions
 
 # COMMAND ----------
@@ -422,21 +604,55 @@ def export_notebook(path: str) -> Tuple[str, str]:
 
 # COMMAND ----------
 
-def scan_all_jobs() -> List[Dict]:
+def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, verbose: bool = True) -> List[Dict]:
     """
     Scan all jobs in the workspace for breaking changes.
+    
+    Args:
+        scan_id: Unique identifier for this scan (for checkpointing)
+        max_jobs: Maximum number of jobs to scan (None for all)
+        dry_run: If True, just count jobs without scanning content
+        verbose: Print detailed progress
     """
     results = []
+    checkpoint_batch = []
     
     print("Fetching jobs...")
     jobs = list(w.jobs.list())
-    print(f"Found {len(jobs)} jobs")
+    total_jobs = len(jobs)
     
-    for job in jobs:
+    if max_jobs:
+        jobs = jobs[:max_jobs]
+        print(f"Found {total_jobs} jobs, limiting to {max_jobs} for testing")
+    else:
+        print(f"Found {total_jobs} jobs")
+    
+    if dry_run:
+        print(f"[DRY RUN] Would scan {len(jobs)} jobs")
+        return []
+    
+    # Get already completed jobs from checkpoint
+    completed_jobs = get_completed_items(scan_id, "job")
+    if completed_jobs:
+        print(f"  ⏩ Resuming: {len(completed_jobs)} jobs already scanned")
+    
+    skipped = 0
+    for idx, job in enumerate(jobs, 1):
+        job_id_str = str(job.job_id)
+        
+        # Skip if already scanned (checkpoint)
+        if job_id_str in completed_jobs:
+            skipped += 1
+            continue
+        
         try:
             # Get full job details
             job_details = w.jobs.get(job.job_id)
             job_name = job_details.settings.name if job_details.settings else f"Job {job.job_id}"
+            
+            if verbose:
+                resumed_info = f" (resumed, skipped {skipped})" if skipped > 0 and idx == skipped + 1 else ""
+                print(f"  [{idx}/{len(jobs)}] Scanning job: {job_name[:50]}...{resumed_info}")
             
             # Get tasks
             tasks = job_details.settings.tasks if job_details.settings and job_details.settings.tasks else []
@@ -475,11 +691,16 @@ def scan_all_jobs() -> List[Dict]:
                                 **finding
                             })
                         
-                        if findings:
-                            print(f"  Job '{job_name}' / Task '{task.task_key}': {len(findings)} findings")
+                        if findings and verbose:
+                            print(f"    → Task '{task.task_key}': {len(findings)} findings")
+            
+            # Save checkpoint for this job
+            save_checkpoint(scan_id, "job", job_id_str, job_name, "completed")
             
         except Exception as e:
             print(f"Warning: Could not scan job {job.job_id}: {e}")
+            # Save failed checkpoint
+            save_checkpoint(scan_id, "job", job_id_str, str(job.job_id), "failed", str(e))
     
     return results
 
@@ -490,19 +711,49 @@ def scan_all_jobs() -> List[Dict]:
 
 # COMMAND ----------
 
-def scan_workspace_path(root_path: str, exclude_paths: List[str]) -> List[Dict]:
+def scan_workspace_path(
+    scan_id: str,
+    root_path: str, 
+    exclude_paths: List[str],
+    max_notebooks: int = None,
+    dry_run: bool = False,
+    verbose: bool = True
+) -> List[Dict]:
     """
     Recursively scan a workspace path for notebooks with breaking changes.
+    
+    Args:
+        scan_id: Unique identifier for this scan (for checkpointing)
+        root_path: Workspace path to scan
+        exclude_paths: Paths to exclude from scanning
+        max_notebooks: Maximum notebooks to scan (None for all)
+        dry_run: If True, just count notebooks without scanning content
+        verbose: Print detailed progress
     """
     results = []
+    notebooks_scanned = [0]  # Use list to allow modification in nested function
+    notebooks_found = [0]
+    
+    # Get already completed notebooks from checkpoint
+    completed_notebooks = get_completed_items(scan_id, "notebook")
+    if completed_notebooks:
+        print(f"  ⏩ Resuming: {len(completed_notebooks)} notebooks already scanned")
     
     def should_exclude(path: str) -> bool:
         return any(path.startswith(excl) for excl in exclude_paths)
     
     def scan_directory(path: str):
+        # Check if we've hit the limit
+        if max_notebooks and notebooks_scanned[0] >= max_notebooks:
+            return
+            
         try:
             objects = w.workspace.list(path)
             for obj in objects:
+                # Check limit again inside loop
+                if max_notebooks and notebooks_scanned[0] >= max_notebooks:
+                    return
+                    
                 if should_exclude(obj.path):
                     continue
                 
@@ -510,32 +761,64 @@ def scan_workspace_path(root_path: str, exclude_paths: List[str]) -> List[Dict]:
                     scan_directory(obj.path)
                     
                 elif obj.object_type == ObjectType.NOTEBOOK:
-                    content, file_type = export_notebook(obj.path)
-                    if content:
-                        findings = scan_content_for_patterns(content, file_type, BREAKING_PATTERNS)
-                        findings.extend(scan_duplicate_temp_views(content, file_type))
+                    notebooks_found[0] += 1
+                    
+                    # Skip if already scanned (checkpoint)
+                    if obj.path in completed_notebooks:
+                        continue
+                    
+                    if dry_run:
+                        if verbose:
+                            print(f"  [DRY RUN] Would scan: {obj.path}")
+                        continue
+                    
+                    notebooks_scanned[0] += 1
+                    
+                    if verbose:
+                        limit_info = f"/{max_notebooks}" if max_notebooks else ""
+                        print(f"  [{notebooks_scanned[0]}{limit_info}] Scanning: {obj.path[:60]}...")
+                    
+                    try:
+                        content, file_type = export_notebook(obj.path)
+                        if content:
+                            findings = scan_content_for_patterns(content, file_type, BREAKING_PATTERNS)
+                            findings.extend(scan_duplicate_temp_views(content, file_type))
+                            
+                            for finding in findings:
+                                results.append({
+                                    "scan_timestamp": datetime.now().isoformat(),
+                                    "source_type": "WORKSPACE",
+                                    "job_id": None,
+                                    "job_name": None,
+                                    "job_link": None,
+                                    "task_name": None,
+                                    "notebook_path": obj.path,
+                                    "notebook_link": get_notebook_link(obj.path),
+                                    **finding
+                                })
+                            
+                            if findings and verbose:
+                                print(f"    → {len(findings)} findings")
                         
-                        for finding in findings:
-                            results.append({
-                                "scan_timestamp": datetime.now().isoformat(),
-                                "source_type": "WORKSPACE",
-                                "job_id": None,
-                                "job_name": None,
-                                "job_link": None,
-                                "task_name": None,
-                                "notebook_path": obj.path,
-                                "notebook_link": get_notebook_link(obj.path),
-                                **finding
-                            })
+                        # Save checkpoint for this notebook
+                        save_checkpoint(scan_id, "notebook", obj.path, obj.path, "completed")
                         
-                        if findings:
-                            print(f"  Notebook '{obj.path}': {len(findings)} findings")
+                    except Exception as nb_error:
+                        print(f"Warning: Could not scan notebook {obj.path}: {nb_error}")
+                        save_checkpoint(scan_id, "notebook", obj.path, obj.path, "failed", str(nb_error))
                             
         except Exception as e:
             print(f"Warning: Could not scan {path}: {e}")
     
     print(f"Scanning workspace path: {root_path}")
+    if max_notebooks:
+        print(f"  (Limited to {max_notebooks} notebooks for testing)")
+    
     scan_directory(root_path)
+    
+    if dry_run:
+        print(f"[DRY RUN] Found {notebooks_found[0]} notebooks in {root_path}")
+    
     return results
 
 # COMMAND ----------
@@ -569,6 +852,10 @@ RESULT_SCHEMA = StructType([
 
 # COMMAND ----------
 
+# Generate unique scan ID (or reuse existing for resume)
+import uuid
+SCAN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
+
 # Run the scan
 all_results = []
 
@@ -576,14 +863,45 @@ print("=" * 60)
 print("DBR MIGRATION - WORKSPACE PROFILER")
 print("=" * 60)
 print(f"Target DBR Version: {CONFIG['target_dbr_version']}")
+print(f"Scan ID: {SCAN_ID}")
 print(f"Scan started: {datetime.now().isoformat()}")
+
+# Show limits if set
+if CONFIG.get("max_jobs") or CONFIG.get("max_notebooks") or CONFIG.get("dry_run"):
+    print()
+    print("⚠️  TESTING MODE:")
+    if CONFIG.get("dry_run"):
+        print("   - DRY RUN enabled (no actual scanning)")
+    if CONFIG.get("max_jobs"):
+        print(f"   - Max jobs: {CONFIG['max_jobs']}")
+    if CONFIG.get("max_notebooks"):
+        print(f"   - Max notebooks per path: {CONFIG['max_notebooks']}")
+
+# Initialize checkpointing
+if CONFIG.get("enable_checkpointing"):
+    print()
+    print("📍 CHECKPOINTING ENABLED:")
+    print(f"   - Checkpoint table: {get_checkpoint_table_name()}")
+    print(f"   - Scan ID: {SCAN_ID}")
+    print("   - To resume a failed scan, set SCAN_ID to the previous scan's ID")
+    initialize_checkpoint_table()
+    
+    # Show resume info if there's existing progress
+    progress = get_scan_progress(SCAN_ID)
+    if progress:
+        print(f"   - Existing progress found: {progress}")
 print()
 
 # Scan jobs
 if CONFIG["scan_jobs"]:
     print("SCANNING JOBS...")
     print("-" * 40)
-    job_results = scan_all_jobs()
+    job_results = scan_all_jobs(
+        scan_id=SCAN_ID,
+        max_jobs=CONFIG.get("max_jobs"),
+        dry_run=CONFIG.get("dry_run", False),
+        verbose=CONFIG.get("verbose", True)
+    )
     all_results.extend(job_results)
     print(f"Jobs scan complete: {len(job_results)} findings")
     print()
@@ -593,7 +911,14 @@ if CONFIG["scan_workspace"]:
     print("SCANNING WORKSPACE NOTEBOOKS...")
     print("-" * 40)
     for path in CONFIG["workspace_paths"]:
-        workspace_results = scan_workspace_path(path, CONFIG["exclude_paths"])
+        workspace_results = scan_workspace_path(
+            scan_id=SCAN_ID,
+            root_path=path, 
+            exclude_paths=CONFIG["exclude_paths"],
+            max_notebooks=CONFIG.get("max_notebooks"),
+            dry_run=CONFIG.get("dry_run", False),
+            verbose=CONFIG.get("verbose", True)
+        )
         all_results.extend(workspace_results)
     print(f"Workspace scan complete: {len([r for r in all_results if r['source_type'] == 'WORKSPACE'])} findings")
     print()
