@@ -262,8 +262,12 @@ result = add_columns_slow(taxi_df.limit(100))
 # COMMAND ----------
 
 # BC-13.3-002: Parquet timestamp inference changed
-# Test: spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")
-print("BC-13.3-002: Current inferTimestampNTZ:", spark.conf.get("spark.sql.parquet.inferTimestampNTZ.enabled", "default"))
+# Fix: spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")
+try:
+    val = spark.conf.get("spark.sql.parquet.inferTimestampNTZ.enabled")
+    print(f"BC-13.3-002: Current inferTimestampNTZ: {val}")
+except:
+    print("BC-13.3-002: inferTimestampNTZ not explicitly set (using DBR default)")
 
 # COMMAND ----------
 
@@ -273,8 +277,12 @@ print("BC-13.3-002: Current inferTimestampNTZ:", spark.conf.get("spark.sql.parqu
 # COMMAND ----------
 
 # BC-15.4-002: JDBC timestamp handling changed
-# Test: spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
-print("BC-15.4-002: Current useNullCalendar:", spark.conf.get("spark.sql.legacy.jdbc.useNullCalendar", "default"))
+# Fix: spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
+try:
+    val = spark.conf.get("spark.sql.legacy.jdbc.useNullCalendar")
+    print(f"BC-15.4-002: Current useNullCalendar: {val}")
+except:
+    print("BC-15.4-002: useNullCalendar not explicitly set (using DBR default)")
 
 # COMMAND ----------
 
