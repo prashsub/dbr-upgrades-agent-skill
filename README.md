@@ -45,12 +45,17 @@ This agent skill helps you automatically detect and fix breaking changes when up
 
 ```
 .
-├── databricks-dbr-migration/     # Agent skill definition
+├── databricks-dbr-migration/     # Agent skill definition (v4.0.0)
 │   ├── SKILL.md                  # Main skill configuration
 │   ├── assets/
-│   │   ├── fix-patterns.json     # Automated fix patterns
-│   │   ├── version-matrix.json   # DBR version compatibility
-│   │   └── migration-template.sql
+│   │   ├── fix-patterns.json           # Automated fix patterns
+│   │   ├── version-matrix.json         # DBR version compatibility
+│   │   ├── migration-template.sql
+│   │   └── markdown-templates/         # Summary templates
+│   │       ├── scan-summary.md
+│   │       ├── fix-summary.md
+│   │       ├── validation-report.md
+│   │       └── README.md
 │   ├── references/               # Breaking changes documentation
 │   │   ├── BREAKING-CHANGES.md   # Complete reference guide
 │   │   ├── MIGRATION-CHECKLIST.md
@@ -65,24 +70,29 @@ This agent skill helps you automatically detect and fix breaking changes when up
 ├── demo/                         # Example notebooks
 │   ├── dbr_migration_demo_notebook.py        # Before
 │   ├── dbr_migration_demo_notebook_FIXED.py  # After
-│   └── README.md
+│   ├── dbr_migration_test_notebook.py        # Multi-file test
+│   └── utils/                                # Test utilities
+│       ├── dbr_test_helpers.py
+│       └── __init__.py
 │
-├── developer-guide/              # Developer documentation
-│   ├── README.md                 # Quick start guide
-│   ├── 01-skill-setup.md
-│   ├── 02-using-assistant.md
-│   ├── 03-quality-validation.md
-│   ├── 04-performance-testing.md
-│   ├── 05-rollout-checklist.md
-│   ├── 06-output-validation-criteria.md
-│   ├── 07-testing-validation-signoff-guide.md
-│   ├── 08-tracker-templates.md
+├── developer-guide/              # ⭐ Start here!
+│   ├── README.md                 # Complete workflow guide
 │   ├── BREAKING-CHANGES-EXPLAINED.md  # Detailed explanations
-│   └── workspace-profiler.py          # Account-level scanner
+│   ├── workspace-profiler.py          # Account-level scanner
+│   └── archive/                       # Detailed technical guides
+│       ├── 01-skill-setup.md
+│       ├── 02-using-assistant.md
+│       ├── 03-quality-validation.md
+│       ├── 04-performance-testing.md
+│       ├── 05-rollout-checklist.md
+│       ├── 06-output-validation-criteria.md
+│       ├── 07-testing-validation-signoff-guide.md
+│       ├── 08-tracker-templates.md
+│       ├── 09-effective-prompts-guide.md
+│       ├── VALIDATION-REPORT.md
+│       ├── SCRIPTS-VALIDATION-REPORT.md
+│       └── OPUS-REVIEW.md
 │
-├── VALIDATION-REPORT.md          # Quality validation results
-├── SCRIPTS-VALIDATION-REPORT.md  # Script testing results
-├── OPUS-REVIEW.md                # Expert review summary
 └── README.md                     # This file
 ```
 
@@ -90,23 +100,41 @@ This agent skill helps you automatically detect and fix breaking changes when up
 
 ## 🚀 Quick Start
 
-### Using Databricks Assistant (Recommended)
+### 1️⃣ Install the Skill (One-Time Setup)
 
-In any Databricks notebook:
+```bash
+# Copy skill to your Databricks workspace
+mkdir -p /Workspace/Users/$(whoami)/.assistant/skills/
+cp -r databricks-dbr-migration /Workspace/Users/$(whoami)/.assistant/skills/
 
-```
-@databricks-dbr-migration scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
-```
-
-```
-@databricks-dbr-migration fix all breaking changes in this notebook
-```
-
-```
-@databricks-dbr-migration validate that all breaking changes have been fixed
+# Verify installation
+ls /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/SKILL.md
 ```
 
-> 💡 **Pro Tip:** See [Effective Prompts Guide](developer-guide/09-effective-prompts-guide.md) for 50+ ready-to-use prompts!
+### 2️⃣ Use the Agent (Main Workflow)
+
+**First-time use** (include full skill path):
+
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, 
+scan and fix this notebook for DBR 17.3 compatibility
+```
+
+**After skill is loaded** (shorthand works):
+
+```
+@databricks-dbr-migration scan this notebook for DBR 17.3 breaking changes
+```
+
+```
+@databricks-dbr-migration fix all auto-fixable issues
+```
+
+```
+@databricks-dbr-migration validate all fixes were applied correctly
+```
+
+> 💡 **Pro Tip:** See [Developer Guide](developer-guide/README.md) for the complete workflow!
 
 ### Using Python Scripts
 
@@ -147,27 +175,15 @@ python databricks-dbr-migration/scripts/validate-migration.py \
 
 ## 📖 Documentation
 
-### For POD Teams (Start Here)
+### ⭐ Start Here
 
 | Document | Description |
 |----------|-------------|
-| [Testing & Validation Guide](developer-guide/07-testing-validation-signoff-guide.md) | ⭐ **Main Guide** - Step-by-step testing & sign-off |
+| **[Developer Guide](developer-guide/README.md)** | 🚀 **Main workflow** - Profiler → Agent → Review → Test |
 | [Breaking Changes Explained](developer-guide/BREAKING-CHANGES-EXPLAINED.md) | 📖 Every breaking change with examples |
-| [Output Validation Criteria](developer-guide/06-output-validation-criteria.md) | Which jobs need output comparison |
-| [Tracker Templates](developer-guide/08-tracker-templates.md) | Issue, Performance, and Sign-Off trackers |
+| [Workspace Profiler](developer-guide/workspace-profiler.py) | 🔍 Scan all jobs/notebooks in your workspace |
 
-### Technical Deep-Dives
-
-| Document | Description |
-|----------|-------------|
-| [Skill Setup](developer-guide/01-skill-setup.md) | Install the DBR migration skill |
-| [Using Assistant](developer-guide/02-using-assistant.md) | Use Databricks Assistant to scan & fix |
-| **[Effective Prompts Guide](developer-guide/09-effective-prompts-guide.md)** | 🎯 **Ready-to-use prompts** for running the agent |
-| [Quality Validation](developer-guide/03-quality-validation.md) | Validate code quality after migration |
-| [Performance Testing](developer-guide/04-performance-testing.md) | Test for performance regressions |
-| [Rollout Checklist](developer-guide/05-rollout-checklist.md) | Complete production rollout checklist |
-
-### Reference Guides
+### Skill Reference
 
 | Document | Description |
 |----------|-------------|
@@ -176,6 +192,20 @@ python databricks-dbr-migration/scripts/validate-migration.py \
 | [Quick Reference](databricks-dbr-migration/references/QUICK-REFERENCE.md) | Quick lookup for common issues |
 | [Scala 2.13 Guide](databricks-dbr-migration/references/SCALA-213-GUIDE.md) | Scala 2.12 → 2.13 migration |
 | [Spark Connect Guide](databricks-dbr-migration/references/SPARK-CONNECT-GUIDE.md) | Spark Connect compatibility |
+
+### Detailed Technical Guides (Archive)
+
+For deep dives into specific topics, see [developer-guide/archive/](developer-guide/archive/):
+
+| Document | Description |
+|----------|-------------|
+| [Skill Setup](developer-guide/archive/01-skill-setup.md) | Detailed installation instructions |
+| [Using Assistant](developer-guide/archive/02-using-assistant.md) | Advanced assistant usage |
+| [Effective Prompts Guide](developer-guide/archive/09-effective-prompts-guide.md) | 50+ prompt variations |
+| [Quality Validation](developer-guide/archive/03-quality-validation.md) | Code quality validation framework |
+| [Performance Testing](developer-guide/archive/04-performance-testing.md) | Performance regression testing |
+| [Testing & Sign-Off Guide](developer-guide/archive/07-testing-validation-signoff-guide.md) | Complete testing framework |
+| [Validation Reports](developer-guide/archive/) | VALIDATION-REPORT.md, SCRIPTS-VALIDATION-REPORT.md, OPUS-REVIEW.md |
 
 ---
 
@@ -198,25 +228,43 @@ python databricks-dbr-migration/scripts/validate-migration.py \
 
 ## 💡 Example Usage
 
-### Scan a Single Notebook
+### Complete Workflow (Copy-Paste Ready)
 
+**Step 1: Run Profiler**
 ```python
-# In Databricks Assistant
-@databricks-dbr-migration scan this notebook for breaking changes from DBR 13.3 to 17.3
+# In Databricks notebook
+%run ./developer-guide/workspace-profiler.py
+# Output: List of jobs/notebooks with potential breaking changes
 ```
 
-### Fix Specific Issues
-
-```python
-# In Databricks Assistant
-@databricks-dbr-migration fix the MERGE INTO syntax issues in this notebook
+**Step 2: Open Flagged Job & Run Agent**
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, 
+scan and fix this notebook for DBR 17.3 compatibility
 ```
 
-### Generate Migration Report
+**Step 3: Review Agent's Work**
+- Check auto-fixes applied
+- Review manual review items flagged
+- Note config suggestions to test
 
-```python
-# In Databricks Assistant
-@databricks-dbr-migration generate a complete migration report for my workspace
+**Step 4: Test on DBR 17.3**
+- Run job on new cluster
+- Verify output correctness
+- Log any issues to tracker
+
+### Additional Prompts (After Skill Loaded)
+
+```
+@databricks-dbr-migration scan this entire folder for breaking changes
+```
+
+```
+@databricks-dbr-migration fix only the input_file_name() issues
+```
+
+```
+@databricks-dbr-migration validate no breaking patterns remain
 ```
 
 ---
@@ -231,7 +279,7 @@ Based on validation testing:
 - ✅ **<5%** false positive rate
 - ✅ **Validated** on 50+ real-world notebooks
 
-See [VALIDATION-REPORT.md](VALIDATION-REPORT.md) for detailed results.
+See [VALIDATION-REPORT.md](developer-guide/archive/VALIDATION-REPORT.md) for detailed results.
 
 ---
 
@@ -274,6 +322,9 @@ Apache License 2.0 - See [LICENSE](LICENSE) for details.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 4.0.0 | 2026-01-26 | Markdown templates extracted, simplified developer guide |
+| 3.6.0 | 2026-01-26 | Added markdown summary cell generation after scan/fix |
+| 3.2.0 | 2026-01-25 | Multi-file project support, skill renamed to databricks-dbr-migration |
 | 2.0.0 | 2026-01-23 | Complete rewrite with automated fixes |
 | 1.0.0 | 2025-12-15 | Initial release with scanning capability |
 
