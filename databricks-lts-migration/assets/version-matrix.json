@@ -1,0 +1,125 @@
+{
+  "description": "Databricks LTS Runtime Version Matrix",
+  "last_updated": "2026-01-23",
+  "versions": [
+    {
+      "runtime": "13.3 LTS",
+      "spark_version": "3.4.1",
+      "scala_version": "2.12.15",
+      "python_version": "3.10.12",
+      "java_version": "8",
+      "release_date": "2023-08",
+      "end_of_support": "2026-08",
+      "key_features": [
+        "Spark 3.4.1",
+        "Delta Lake 2.4",
+        "Photon enabled by default",
+        "Unity Catalog support"
+      ],
+      "breaking_changes": ["BC-13.3-001", "BC-13.3-002", "BC-13.3-003", "BC-13.3-004"]
+    },
+    {
+      "runtime": "14.3 LTS",
+      "spark_version": "3.5.0",
+      "scala_version": "2.12.15",
+      "python_version": "3.10.12",
+      "java_version": "8",
+      "release_date": "2024-02",
+      "end_of_support": "2027-02",
+      "key_features": [
+        "Spark 3.5.0",
+        "Delta Lake 3.0",
+        "VARIANT data type",
+        "Improved streaming"
+      ],
+      "breaking_changes": ["BC-14.3-001"]
+    },
+    {
+      "runtime": "15.4 LTS",
+      "spark_version": "3.5.0",
+      "scala_version": "2.12.15",
+      "python_version": "3.11.11",
+      "java_version": "8",
+      "release_date": "2024-08",
+      "end_of_support": "2027-08",
+      "key_features": [
+        "Python 3.11",
+        "Enhanced VARIANT support",
+        "Improved Unity Catalog",
+        "Better error messages"
+      ],
+      "breaking_changes": ["BC-15.4-001", "BC-15.4-002", "BC-15.4-003", "BC-15.4-004", "BC-15.4-005"]
+    },
+    {
+      "runtime": "16.4 LTS",
+      "spark_version": "3.5.2",
+      "scala_version": "2.12.15 / 2.13.10",
+      "python_version": "3.12.3",
+      "java_version": "17",
+      "release_date": "2025-05",
+      "end_of_support": "2028-05",
+      "key_features": [
+        "Scala 2.13 support",
+        "Java 17",
+        "Python 3.12",
+        "Spark 3.5.2 improvements"
+      ],
+      "breaking_changes": ["BC-16.4-001", "BC-16.4-002", "BC-16.4-003", "BC-16.4-004", "BC-16.4-005"],
+      "notes": "CRITICAL: Scala 2.13 migration required for Scala code"
+    },
+    {
+      "runtime": "17.3 LTS",
+      "spark_version": "4.0.0",
+      "scala_version": "2.13.16",
+      "python_version": "3.12.3",
+      "java_version": "17",
+      "release_date": "2025-10",
+      "end_of_support": "2028-10",
+      "key_features": [
+        "Apache Spark 4.0",
+        "Major performance improvements",
+        "Enhanced SQL features",
+        "Improved Spark Connect"
+      ],
+      "breaking_changes": ["BC-17.3-001", "BC-17.3-002", "BC-17.3-003", "BC-17.3-004", "BC-17.3-005"],
+      "notes": "Major Spark version upgrade (3.x to 4.0)"
+    }
+  ],
+  "upgrade_paths": {
+    "recommended": {
+      "from": "13.3 LTS",
+      "to": "17.3 LTS",
+      "path": ["13.3 LTS", "14.3 LTS", "15.4 LTS", "16.4 LTS", "17.3 LTS"],
+      "critical_steps": [
+        {
+          "step": "15.4 LTS",
+          "reason": "VARIANT/UDF changes, SQL syntax updates"
+        },
+        {
+          "step": "16.4 LTS",
+          "reason": "Scala 2.13 migration - requires code changes"
+        },
+        {
+          "step": "17.3 LTS",
+          "reason": "Spark 4.0, input_file_name removal"
+        }
+      ]
+    }
+  },
+  "compatibility_matrix": {
+    "delta_lake": {
+      "13.3 LTS": "2.4",
+      "14.3 LTS": "3.0",
+      "15.4 LTS": "3.1",
+      "16.4 LTS": "3.2",
+      "17.3 LTS": "4.0"
+    },
+    "unity_catalog": {
+      "13.3 LTS": "Full support",
+      "14.3 LTS": "Full support",
+      "15.4 LTS": "Full support",
+      "16.4 LTS": "Full support",
+      "17.3 LTS": "Full support"
+    }
+  }
+}

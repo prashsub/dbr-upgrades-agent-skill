@@ -1,0 +1,297 @@
+{
+  "description": "Machine-readable fix patterns for Databricks LTS migration",
+  "version": "1.0.0",
+  "target_runtime": "17.3 LTS",
+  "patterns": [
+    {
+      "id": "BC-17.3-001",
+      "name": "input_file_name() Removed",
+      "severity": "HIGH",
+      "introduced_in": "17.3",
+      "description": "The input_file_name() function is removed in DBR 17.3",
+      "file_types": [".py", ".sql", ".scala"],
+      "detection": {
+        "pattern": "\\binput_file_name\\s*\\(",
+        "flags": "i"
+      },
+      "fixes": {
+        "python": {
+          "patterns": [
+            {
+              "description": "Remove import statement",
+              "find": "from pyspark.sql.functions import input_file_name",
+              "replace": "# input_file_name removed - use _metadata.file_name"
+            },
+            {
+              "description": "Replace in withColumn",
+              "find_regex": "\\.withColumn\\s*\\(\\s*[\"']([^\"']+)[\"']\\s*,\\s*input_file_name\\s*\\(\\s*\\)\\s*\\)",
+              "replace": ".select(\"*\", \"_metadata.file_name\").withColumnRenamed(\"file_name\", \"$1\")"
+            },
+            {
+              "description": "Replace standalone call",
+              "find_regex": "input_file_name\\s*\\(\\s*\\)",
+              "replace": "col(\"_metadata.file_name\")"
+            }
+          ]
+        },
+        "sql": {
+          "patterns": [
+            {
+              "description": "Replace in SELECT",
+              "find_regex": "input_file_name\\s*\\(\\s*\\)",
+              "replace": "_metadata.file_name"
+            }
+          ]
+        },
+        "scala": {
+          "patterns": [
+            {
+              "description": "Remove import",
+              "find": "import org.apache.spark.sql.functions.input_file_name",
+              "replace": "// input_file_name removed - use _metadata.file_name"
+            },
+            {
+              "description": "Replace in withColumn",
+              "find_regex": "\\.withColumn\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*input_file_name\\s*\\(\\s*\\)\\s*\\)",
+              "replace": ".select(col(\"*\"), col(\"_metadata.file_name\").as(\"$1\"))"
+            }
+          ]
+        }
+      },
+      "validation": {
+        "breaking_absent": "\\binput_file_name\\s*\\(",
+        "replacement_present": "_metadata\\.file_name|_metadata\\[.file_name.\\]"
+      }
+    },
+    {
+      "id": "BC-15.4-001",
+      "name": "VARIANT Type in Python UDF",
+      "severity": "HIGH",
+      "introduced_in": "15.4",
+      "description": "VARIANT type is not supported in Python UDFs/UDAFs/UDTFs",
+      "file_types": [".py"],
+      "detection": {
+        "pattern": "VariantType\\s*\\(",
+        "flags": "i"
+      },
+      "fixes": {
+        "python": {
+          "patterns": [
+            {
+              "description": "Replace VariantType import",
+              "find": "from pyspark.sql.types import VariantType",
+              "replace": "from pyspark.sql.types import StringType  # VariantType not supported in Python UDFs"
+            },
+            {
+              "description": "Replace VariantType in return type",
+              "find_regex": "returnType\\s*=\\s*VariantType\\s*\\(\\s*\\)",
+              "replace": "returnType=StringType()  # Use JSON string instead of VARIANT"
+            }
+          ],
+          "notes": [
+            "UDF logic must be updated to work with JSON strings",
+            "Use to_json() before calling UDF and from_json() after",
+            "Consider using SQL functions or Scala UDFs for VARIANT processing"
+          ]
+        }
+      },
+      "validation": {
+        "breaking_absent": "VariantType\\s*\\("
+      }
+    },
+    {
+      "id": "BC-15.4-003",
+      "name": "'!' Syntax for NOT",
+      "severity": "MEDIUM",
+      "introduced_in": "15.4",
+      "description": "Using '!' instead of 'NOT' outside boolean expressions is disallowed",
+      "file_types": [".sql"],
+      "detection": {
+        "pattern": "(IF|IS)\\s*!(?!\\s*=)|\\s!\\s*(IN|BETWEEN|LIKE|EXISTS)\\b",
+        "flags": "i"
+      },
+      "fixes": {
+        "sql": {
+          "patterns": [
+            {
+              "description": "IF ! EXISTS → IF NOT EXISTS",
+              "find_regex": "IF\\s*!\\s*EXISTS",
+              "replace": "IF NOT EXISTS",
+              "flags": "gi"
+            },
+            {
+              "description": "IS ! NULL → IS NOT NULL",
+              "find_regex": "IS\\s*!\\s*NULL",
+              "replace": "IS NOT NULL",
+              "flags": "gi"
+            },
+            {
+              "description": "! IN → NOT IN",
+              "find_regex": "\\s!\\s*IN\\b",
+              "replace": " NOT IN",
+              "flags": "gi"
+            },
+            {
+              "description": "! BETWEEN → NOT BETWEEN",
+              "find_regex": "\\s!\\s*BETWEEN\\b",
+              "replace": " NOT BETWEEN",
+              "flags": "gi"
+            },
+            {
+              "description": "! LIKE → NOT LIKE",
+              "find_regex": "\\s!\\s*LIKE\\b",
+              "replace": " NOT LIKE",
+              "flags": "gi"
+            },
+            {
+              "description": "! EXISTS → NOT EXISTS",
+              "find_regex": "\\s!\\s*EXISTS\\b",
+              "replace": " NOT EXISTS",
+              "flags": "gi"
+            }
+          ]
+        }
+      },
+      "validation": {
+        "breaking_absent": "(IF|IS)\\s*!(?!\\s*=)|\\s!\\s*(IN|BETWEEN|LIKE|EXISTS)\\b",
+        "replacement_present": "\\b(IF\\s+NOT\\s+EXISTS|IS\\s+NOT\\s+NULL|NOT\\s+IN|NOT\\s+BETWEEN|NOT\\s+LIKE|NOT\\s+EXISTS)\\b"
+      }
+    },
+    {
+      "id": "BC-16.4-001",
+      "name": "Scala 2.13 Collection Changes",
+      "severity": "HIGH",
+      "introduced_in": "16.4",
+      "description": "Scala 2.13 introduces collection library changes",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "scala\\.collection\\.JavaConverters|\\.to\\s*\\[\\s*(List|Set|Vector|Seq|Array)\\s*\\]|\\bTraversableOnce\\b|\\bTraversable\\b(?!Once)",
+        "flags": ""
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {
+              "description": "JavaConverters → CollectionConverters",
+              "find": "import scala.collection.JavaConverters._",
+              "replace": "import scala.jdk.CollectionConverters._"
+            },
+            {
+              "description": ".to[List] → .to(List)",
+              "find_regex": "\\.to\\s*\\[\\s*List\\s*\\]",
+              "replace": ".to(List)"
+            },
+            {
+              "description": ".to[Set] → .to(Set)",
+              "find_regex": "\\.to\\s*\\[\\s*Set\\s*\\]",
+              "replace": ".to(Set)"
+            },
+            {
+              "description": ".to[Vector] → .to(Vector)",
+              "find_regex": "\\.to\\s*\\[\\s*Vector\\s*\\]",
+              "replace": ".to(Vector)"
+            },
+            {
+              "description": ".to[Seq] → .to(Seq)",
+              "find_regex": "\\.to\\s*\\[\\s*Seq\\s*\\]",
+              "replace": ".to(Seq)"
+            },
+            {
+              "description": ".to[Array] → .to(Array)",
+              "find_regex": "\\.to\\s*\\[\\s*Array\\s*\\]",
+              "replace": ".to(Array)"
+            },
+            {
+              "description": "TraversableOnce → IterableOnce",
+              "find": "TraversableOnce",
+              "replace": "IterableOnce"
+            },
+            {
+              "description": "Traversable → Iterable",
+              "find_regex": "\\bTraversable\\b(?!Once)",
+              "replace": "Iterable"
+            }
+          ]
+        }
+      },
+      "validation": {
+        "breaking_absent": "scala\\.collection\\.JavaConverters|\\.to\\s*\\[\\s*(List|Set|Vector|Seq|Array)\\s*\\]|\\bTraversableOnce\\b|\\bTraversable\\b(?!Once)",
+        "replacement_present": "scala\\.jdk\\.CollectionConverters|\\.to\\s*\\(\\s*(List|Set|Vector|Seq|Array)\\s*\\)|\\bIterableOnce\\b|\\bIterable\\b"
+      }
+    },
+    {
+      "id": "BC-17.3-002",
+      "name": "Auto Loader Incremental Listing",
+      "severity": "MEDIUM",
+      "introduced_in": "17.3",
+      "description": "Auto Loader incremental listing default changed from 'auto' to 'false'",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "format\\s*\\(\\s*[\"']cloudFiles[\"']\\s*\\)",
+        "flags": "i"
+      },
+      "fixes": {
+        "python": {
+          "patterns": [
+            {
+              "description": "Add explicit incremental listing option",
+              "find_regex": "(\\.format\\s*\\(\\s*[\"']cloudFiles[\"']\\s*\\))",
+              "replace": "$1\n    .option(\"cloudFiles.useIncrementalListing\", \"auto\")"
+            }
+          ],
+          "notes": [
+            "Only add if you want to preserve old behavior",
+            "Consider migrating to file events: .option('cloudFiles.useNotifications', 'true')"
+          ]
+        },
+        "scala": {
+          "patterns": [
+            {
+              "description": "Add explicit incremental listing option",
+              "find_regex": "(\\.format\\s*\\(\\s*\"cloudFiles\"\\s*\\))",
+              "replace": "$1\n    .option(\"cloudFiles.useIncrementalListing\", \"auto\")"
+            }
+          ]
+        }
+      },
+      "validation": {
+        "manual_review": true,
+        "note": "Review Auto Loader jobs to determine if incremental listing is needed"
+      }
+    }
+  ],
+  "legacy_config_flags": [
+    {
+      "config": "spark.sql.parquet.inferTimestampNTZ.enabled",
+      "default_old": "true (infers TIMESTAMP)",
+      "default_new": "true (infers TIMESTAMP_NTZ)",
+      "set_to_restore": "false",
+      "introduced_in": "13.3",
+      "scope": "session"
+    },
+    {
+      "config": "spark.sql.legacy.jdbc.useNullCalendar",
+      "default_old": "false",
+      "default_new": "true",
+      "set_to_restore": "false",
+      "introduced_in": "15.4",
+      "scope": "session"
+    },
+    {
+      "config": "spark.sql.legacy.readFileSourceTableCacheIgnoreOptions",
+      "default_old": "implicit true behavior",
+      "default_new": "false",
+      "set_to_restore": "true",
+      "introduced_in": "16.4",
+      "scope": "session"
+    },
+    {
+      "config": "cloudFiles.useIncrementalListing",
+      "default_old": "auto",
+      "default_new": "false",
+      "set_to_restore": "auto",
+      "introduced_in": "17.3",
+      "scope": "option (per-stream)"
+    }
+  ]
+}
