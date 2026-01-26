@@ -107,6 +107,11 @@ taxi_df.printSchema()
 # MAGIC | 16.4 LTS | ⚠️ Deprecated (works with warning) |
 # MAGIC | **17.3 LTS** | ❌ **REMOVED** - `AnalysisException: Undefined function` |
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 17.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/17.3lts.html)
+# MAGIC - [Spark 4.0 Migration Guide](https://spark.apache.org/docs/latest/sql-migration-guide.html#upgrading-from-spark-sql-33-to-40)
+# MAGIC - [File Metadata Column Documentation](https://docs.databricks.com/en/ingestion/file-metadata-column.html)
+# MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
 # MAGIC **Detection Pattern (Regex):**
@@ -196,6 +201,10 @@ print(f"Processed {processed_df.count()} records with source file tracking")
 # MAGIC | `! BETWEEN` | ✅ Works | ❌ `ParseException` |
 # MAGIC | `! LIKE` | ✅ Works | ❌ `ParseException` |
 # MAGIC | `!= ` | ✅ Works | ✅ Still works (comparison operator) |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 15.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/15.4lts.html)
+# MAGIC - [Spark SQL ANSI Compliance](https://spark.apache.org/docs/latest/sql-ref-ansi-compliance.html)
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
@@ -318,6 +327,10 @@ taxi_df.createOrReplaceTempView("taxi_trips")
 # MAGIC 
 # MAGIC > ✅ **RESOLVED:** If upgrading to 16.4 or 17.3, **no action needed!**
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 15.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/15.4lts.html)
+# MAGIC - [VARIANT Data Type Documentation](https://docs.databricks.com/en/sql/language-manual/data-types/variant-type.html)
+# MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
 # MAGIC **Detection Pattern:**
@@ -396,6 +409,10 @@ print("Created DataFrame with VARIANT column")
 # MAGIC 
 # MAGIC Specifying column types directly in `CREATE VIEW` is **no longer allowed** in DBR 15.4+.
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 15.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/15.4lts.html)
+# MAGIC - [CREATE VIEW Documentation](https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-view.html)
+# MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
 # MAGIC **Detection Pattern:**
@@ -463,6 +480,11 @@ print("Created DataFrame with VARIANT column")
 # MAGIC |----------|--------------|---------------|
 # MAGIC | When errors appear | At transformation time | At action time |
 # MAGIC | Try/except catches errors | ✅ Immediately | ❌ Only at `.show()`, `.collect()`, etc. |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [Spark Connect Overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
+# MAGIC - [Databricks Connect](https://docs.databricks.com/en/dev-tools/databricks-connect/index.html)
+# MAGIC - [Serverless Compute Documentation](https://docs.databricks.com/en/compute/serverless.html)
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
@@ -533,6 +555,10 @@ def analyze_with_misspelled_column():
 # MAGIC | Scenario | Spark Classic | Spark Connect |
 # MAGIC |----------|--------------|---------------|
 # MAGIC | View name reused | Each DF keeps original data | ❌ All DFs see new data! |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [Spark Connect Overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
+# MAGIC - [Temp Views in Databricks](https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-view.html#temporary-views)
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
@@ -611,6 +637,10 @@ print(f"Batch 3 count: {batch_3.count()}")  # Classic: 50, Connect: 50
 # MAGIC | Scenario | Spark Classic | Spark Connect |
 # MAGIC |----------|--------------|---------------|
 # MAGIC | Variable changes after UDF defined | UDF uses old value | ❌ UDF uses new value! |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [Spark Connect Overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
+# MAGIC - [User-Defined Functions (UDFs)](https://docs.databricks.com/en/udf/index.html)
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
@@ -694,6 +724,10 @@ df_with_surge.select("fare_amount", "surge_fare").show(5)
 # MAGIC ### 📖 What Changed
 # MAGIC 
 # MAGIC In **Spark Connect**, accessing `df.columns`, `df.schema`, or `df.dtypes` triggers an **RPC call** to the server.
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [Spark Connect Overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
+# MAGIC - [DataFrame Schema Reference](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.schema.html)
 # MAGIC 
 # MAGIC | Operation | Spark Classic | Spark Connect |
 # MAGIC |-----------|--------------|---------------|
@@ -791,6 +825,11 @@ print(f"Result columns: {len(result_bad.columns)}")
 # MAGIC 
 # MAGIC Default for `spark.sql.parquet.inferTimestampNTZ.enabled` changed, affecting how Parquet files with `TIMESTAMP_NTZ` are read.
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 13.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/13.3lts.html)
+# MAGIC - [Timestamp Types (TIMESTAMP_NTZ)](https://docs.databricks.com/en/sql/language-manual/data-types/timestamp-ntz-type.html)
+# MAGIC - [Parquet File Configuration](https://spark.apache.org/docs/latest/sql-data-sources-parquet.html)
+# MAGIC 
 # MAGIC ### 📋 When to Add Config
 # MAGIC 
 # MAGIC | Scenario | Action |
@@ -825,6 +864,10 @@ print('spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")')
 # MAGIC 
 # MAGIC Default for `spark.sql.legacy.jdbc.useNullCalendar` changed to `true`, affecting JDBC timestamp handling.
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 15.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/15.4lts.html)
+# MAGIC - [JDBC Data Source Configuration](https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html)
+# MAGIC 
 # MAGIC ### 📋 When to Add Config
 # MAGIC 
 # MAGIC | Scenario | Action |
@@ -856,6 +899,11 @@ print('spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")')
 # MAGIC ### 📖 What Changed
 # MAGIC 
 # MAGIC Setting `merge.materializeSource` to `none` is **no longer allowed** and will throw an error.
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 16.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC - [MERGE INTO Documentation](https://docs.databricks.com/en/sql/language-manual/delta-merge-into.html)
+# MAGIC - [Delta Lake Table Properties](https://docs.delta.io/latest/table-properties.html)
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
@@ -892,6 +940,11 @@ print('spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")'
 # MAGIC | `cloudFiles.useIncrementalListing` | `"auto"` | `"false"` |
 # MAGIC 
 # MAGIC **Impact:** Auto Loader may be slower (full directory listing) but more reliable.
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 17.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/17.3lts.html)
+# MAGIC - [Auto Loader Documentation](https://docs.databricks.com/en/ingestion/auto-loader/index.html)
+# MAGIC - [Auto Loader Options Reference](https://docs.databricks.com/en/ingestion/auto-loader/options.html)
 # MAGIC 
 # MAGIC ### 📋 When to Add Config
 # MAGIC 
@@ -952,6 +1005,11 @@ print(auto_loader_example)
 # MAGIC 
 # MAGIC `scala.collection.JavaConverters` is deprecated in Scala 2.13, replaced by `scala.jdk.CollectionConverters`.
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 16.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC - [Scala 2.13 Release Notes](https://www.scala-lang.org/news/2.13.0/)
+# MAGIC - [Scala 2.13 Collection Migration](https://docs.scala-lang.org/overviews/core/collections-migration-213.html)
+# MAGIC 
 # MAGIC ### 🔍 Detection Pattern
 # MAGIC 
 # MAGIC ```
@@ -982,6 +1040,10 @@ print(scala_example_1a)
 
 # MAGIC %md
 # MAGIC ## BC-16.4-001b: .to[Collection] → .to(Collection)
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 16.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC - [Scala 2.13 Collections Changes](https://docs.scala-lang.org/overviews/core/collections-migration-213.html)
 # MAGIC 
 # MAGIC ### 🔍 Detection Pattern
 # MAGIC 
@@ -1016,6 +1078,10 @@ print(scala_example_1b)
 # MAGIC %md
 # MAGIC ## BC-16.4-001c: TraversableOnce → IterableOnce
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 16.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC - [Scala 2.13 Collections Changes](https://docs.scala-lang.org/overviews/core/collections-migration-213.html)
+# MAGIC 
 # MAGIC ### 🔍 Detection Pattern
 # MAGIC 
 # MAGIC ```
@@ -1045,6 +1111,10 @@ print(scala_example_1c)
 # MAGIC %md
 # MAGIC ## BC-16.4-001d: Traversable → Iterable
 # MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 16.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC - [Scala 2.13 Collections Changes](https://docs.scala-lang.org/overviews/core/collections-migration-213.html)
+# MAGIC 
 # MAGIC ### 🔍 Detection Pattern
 # MAGIC 
 # MAGIC ```
@@ -1069,6 +1139,11 @@ print(scala_example_1d)
 
 # MAGIC %md
 # MAGIC ## BC-16.4-001e: Stream → LazyList
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 16.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC - [Scala 2.13 LazyList Documentation](https://www.scala-lang.org/api/2.13.0/scala/collection/immutable/LazyList.html)
+# MAGIC - [Scala 2.13 Collections Changes](https://docs.scala-lang.org/overviews/core/collections-migration-213.html)
 # MAGIC 
 # MAGIC ### 🔍 Detection Pattern
 # MAGIC 
