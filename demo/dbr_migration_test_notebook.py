@@ -29,9 +29,37 @@ from pyspark.sql import functions as F
 from pyspark.sql.functions import col, lit, when, udf
 from pyspark.sql.types import *
 import time
+import sys
+import os
+
+# Add utils to path for imports
+sys.path.append(os.path.join(os.getcwd(), 'utils'))
+
+# Import test helpers from utils module
+from utils.dbr_test_helpers import (
+    generate_test_data,
+    create_breaking_change_sample,
+    get_dbr_version,
+    is_breaking_change_applicable,
+    BreakingChangeTestResult,
+    get_legacy_config_settings,
+    generate_test_report
+)
 
 # BC-17.3-001: This import will FAIL on DBR 17.3
 from pyspark.sql.functions import input_file_name
+
+# Display DBR version information
+version_info = get_dbr_version(spark)
+print("=" * 60)
+print("DBR VERSION INFORMATION")
+print("=" * 60)
+print(f"DBR Version: {version_info['dbr_version']}")
+print(f"Full Version: {version_info['dbr_full']}")
+print(f"Spark Version: {version_info['spark_version']}")
+print(f"Is LTS: {version_info['is_lts']}")
+print("=" * 60)
+print()
 
 # Load NYC Taxi dataset
 taxi_df = (spark.read.format("delta")
@@ -39,6 +67,9 @@ taxi_df = (spark.read.format("delta")
     .limit(10000))
 
 print(f"Loaded {taxi_df.count()} records")
+
+# Initialize test results tracking
+test_results = []
 
 # COMMAND ----------
 
@@ -424,6 +455,107 @@ print(auto_loader_code)
 # MAGIC 2. Fix: "Fix all the breaking changes you found"
 # MAGIC 3. Validate: "Validate that all breaking changes have been addressed"
 # MAGIC ```
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Breaking Change Applicability Check
+# MAGIC 
+# MAGIC Using helper functions to check which breaking changes apply to current DBR version
+
+# COMMAND ----------
+
+# Check applicability of each breaking change
+bc_ids = [
+    "BC-17.3-001", "BC-15.4-003", "BC-15.4-001", "BC-15.4-004",
+    "BC-SC-001", "BC-SC-002", "BC-SC-003", "BC-SC-004",
+    "BC-13.3-002", "BC-15.4-002", "BC-16.4-004", "BC-17.3-002",
+    "BC-16.4-001a"
+]
+
+print("=" * 70)
+print("BREAKING CHANGE APPLICABILITY")
+print("=" * 70)
+print()
+
+for bc_id in bc_ids:
+    applicable = is_breaking_change_applicable(spark, bc_id)
+    bc_sample = create_breaking_change_sample(spark, bc_id)
+    status = "✅ APPLIES" if applicable else "❌ N/A"
+    print(f"{status} | {bc_id}: {bc_sample.get('description', 'Unknown')}")
+    print(f"         Severity: {bc_sample.get('severity', 'UNKNOWN')}")
+    print()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Generate Test Data Using Helper Functions
+
+# COMMAND ----------
+
+# Generate test data using helper function
+test_df = generate_test_data(spark, num_rows=50)
+print("Generated test data:")
+test_df.show(5)
+
+# Validate schema using helper function
+from utils.dbr_test_helpers import validate_dataframe_schema
+
+expected_cols = ["id", "value", "category", "created_at"]
+is_valid, message = validate_dataframe_schema(test_df, expected_cols)
+print(f"\nSchema Validation: {'✅ PASSED' if is_valid else '❌ FAILED'}")
+print(f"Message: {message}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Test Results Summary
+
+# COMMAND ----------
+
+# Create sample test results for demonstration
+sample_results = [
+    BreakingChangeTestResult("BC-17.3-001", "input_file_name() removed"),
+    BreakingChangeTestResult("BC-15.4-003", "! syntax for NOT disallowed"),
+    BreakingChangeTestResult("BC-SC-002", "Temp view name reuse")
+]
+
+# Simulate test results
+sample_results[0].add_test_result(True, "Successfully replaced with _metadata.file_name")
+sample_results[0].add_test_result(True, "All imports updated")
+
+sample_results[1].add_test_result(True, "Replaced ! with NOT in SQL")
+sample_results[1].add_test_result(False, "Found additional ! usage in line 123")
+
+sample_results[2].add_test_result(False, "Duplicate temp view name detected")
+
+# Generate and display report
+report = generate_test_report(sample_results)
+print(report)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Recommended Legacy Configurations
+
+# COMMAND ----------
+
+# Display recommended legacy configurations
+configs = get_legacy_config_settings()
+
+print("=" * 70)
+print("RECOMMENDED LEGACY CONFIGURATIONS")
+print("=" * 70)
+print()
+print("Add these to your cluster/notebook if timestamps or MERGE behave differently:")
+print()
+for key, value in configs.items():
+    print(f"  {key} = {value}")
+print()
+print("To apply these configs, uncomment and run:")
+print("# from utils.dbr_test_helpers import apply_legacy_configs")
+print("# result = apply_legacy_configs(spark)")
+print("# print(result)")
 
 # COMMAND ----------
 
