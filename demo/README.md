@@ -6,8 +6,17 @@ This folder contains comprehensive training and demo materials for DBR migration
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| `dbr_migration_demo_notebook.py` | **Training + Demo** - Learn all breaking changes AND demo the Agent Skill | ~1200 |
+| `dbr_migration_demo_notebook.py` | **Training + Demo** - Comprehensive guide with all breaking changes | ~1300 |
+| `dbr_migration_test_notebook.py` | **Test Notebook** - Compact notebook with all 17 breaking changes for quick Agent testing | ~350 |
 | `dbr_migration_demo_notebook_FIXED.py` | **Reference** - Shows all issues remediated | ~800 |
+
+## Quick Start: Which Notebook to Use?
+
+| Use Case | Notebook |
+|----------|----------|
+| **Testing the Agent Skill quickly** | `dbr_migration_test_notebook.py` |
+| **Training developers on breaking changes** | `dbr_migration_demo_notebook.py` |
+| **Seeing the fixed code** | `dbr_migration_demo_notebook_FIXED.py` |
 
 ## What's in the Training Notebook?
 
