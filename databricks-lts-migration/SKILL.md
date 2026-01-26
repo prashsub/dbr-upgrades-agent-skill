@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
-  databricks-skill-version: "3.0.0"
+  databricks-skill-version: "3.1.0"
   databricks-skill-category: platform-migration
   databricks-skill-last-updated: "2026-01-26"
 allowed-tools: Read Write Bash(grep:*) Bash(find:*) Bash(python:*)
@@ -71,10 +71,10 @@ When user asks to scan code for breaking changes, follow these steps:
 
 ### Step 1: Identify Target Files
 
-Find all relevant files in the specified path:
+Find all relevant files in the specified path **including subdirectories**:
 
 ```bash
-# Find Python files
+# Find Python files (recursively scans all subdirectories)
 find /path/to/scan -name "*.py" -type f
 
 # Find SQL files
@@ -82,6 +82,24 @@ find /path/to/scan -name "*.sql" -type f
 
 # Find Scala files
 find /path/to/scan -name "*.scala" -type f
+```
+
+**Important for Multi-File Projects:**
+- The `find` command recursively searches all subdirectories (e.g., `utils/`, `src/`, etc.)
+- Scan ALL Python files found, including helper modules and utility packages
+- Check `import` and `from` statements to identify dependencies
+- If a notebook imports from local modules (e.g., `from utils.helpers import foo`), scan those imported files too
+- Look for package structures with `__init__.py` files
+
+**Example Multi-File Structure:**
+```
+project/
+├── main_notebook.py          ← Scan this
+├── utils/
+│   ├── __init__.py           ← Scan this
+│   └── dbr_helpers.py        ← Scan this (imported by main_notebook)
+└── config/
+    └── settings.py           ← Scan this if imported
 ```
 
 ### Step 2: Search for Breaking Change Patterns
@@ -218,6 +236,23 @@ Format findings as:
 ## Capability 2: FIX - Apply Automatic Remediations
 
 When user asks to fix breaking changes, apply these transformations:
+
+### Multi-File Fix Strategy
+
+**If breaking changes are found in multiple files:**
+1. **Fix all files in a single session** - Don't just fix the main file and ignore imported modules
+2. **Maintain import compatibility** - If you fix `input_file_name()` in a utility module, ensure the calling code still works
+3. **Update imports** - Remove deprecated imports from ALL files (e.g., `from pyspark.sql.functions import input_file_name`)
+4. **Test cross-file dependencies** - After fixing, verify imports still resolve correctly
+5. **Report all changes** - List every file modified with a summary of changes
+
+**Example Multi-File Fix:**
+```
+Fixed 3 files:
+✅ demo/main_notebook.py - Replaced input_file_name() (2 occurrences)
+✅ demo/utils/helpers.py - Replaced input_file_name() (1 occurrence), removed import
+✅ demo/utils/__init__.py - No changes needed (no breaking changes found)
+```
 
 ### Fix BC-17.3-001: input_file_name() → _metadata.file_name
 
