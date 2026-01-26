@@ -1,157 +1,251 @@
-# Databricks Runtime Upgrade Guide for Developers
+# DBR Migration Guide
 
-This guide provides step-by-step instructions for developers to upgrade Databricks Runtime (DBR) from 13.3 LTS to 17.3 LTS using the **Databricks Assistant Agent Skills** feature.
+Upgrade from DBR 13.3 LTS to 17.3 LTS using the Databricks Assistant Agent Skill.
 
 ---
 
-## 📋 Quick Links
+## Workflow
 
-### For POD Teams (Start Here)
+```
+1. PROFILER     → Get list of jobs with potential breaking changes
+2. OPEN JOB     → Open each flagged job in Databricks
+3. RUN AGENT    → Agent scans, fixes, and flags items for review
+4. REVIEW       → Review agent's work, implement suggestions
+5. TEST & LOG   → Test on new DBR, log any issues to tracker
+```
 
-| Document | Description |
-|----------|-------------|
-| **[07-testing-validation-signoff-guide.md](07-testing-validation-signoff-guide.md)** | ⭐ **Main Guide** - Step-by-step testing & sign-off instructions |
-| **[BREAKING-CHANGES-EXPLAINED.md](BREAKING-CHANGES-EXPLAINED.md)** | 📖 **Learn the changes** - Every breaking change explained + **Developer Action Guides** |
-| [06-output-validation-criteria.md](06-output-validation-criteria.md) | Criteria for which jobs need output comparison |
-| [08-tracker-templates.md](08-tracker-templates.md) | Templates for Issue, Performance, and Sign-Off trackers |
+---
 
-> 💡 **New!** `BREAKING-CHANGES-EXPLAINED.md` now includes **step-by-step guides** for:
-> - Manual Review items (what to check, decision matrices, fix patterns)
-> - Configuration Settings (when to add, where to add, how to test)
+## Step 1: Run Profiler
 
-### Technical Deep-Dives
+Run the [workspace-profiler.py](workspace-profiler.py) notebook to get a list of jobs with potential breaking changes.
 
-| Document | Description |
-|----------|-------------|
-| [01-skill-setup.md](01-skill-setup.md) | Install the DBR migration skill in your workspace |
-| [02-using-assistant.md](02-using-assistant.md) | Use Databricks Assistant to scan and fix breaking changes |
-| **[09-effective-prompts-guide.md](09-effective-prompts-guide.md)** | 🎯 **Ready-to-use prompts** for efficiently running the agent skill |
-| [03-quality-validation.md](03-quality-validation.md) | Validate code quality and correctness after migration |
-| [04-performance-testing.md](04-performance-testing.md) | Test for performance regressions |
-| [05-rollout-checklist.md](05-rollout-checklist.md) | Complete checklist for production rollout |
+```python
+# In Databricks, run the profiler notebook
+# Output: List of jobs/notebooks with potential issues
+```
 
-### 🔍 Account-Level Profiler (Run First!)
+**Output:** Delta table + CSV with jobs that need review.
 
-Before starting individual notebook fixes, run the workspace profiler to get a complete picture:
+---
 
-| Script | Description |
+## Step 2: Install Skill (One-Time Setup)
+
+Copy the migration skill to your workspace:
+
+```bash
+# Skill location
+/Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/
+```
+
+**Verify installation:**
+```
+ls /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/SKILL.md
+```
+
+If not installed, copy from the repo:
+```bash
+mkdir -p /Workspace/Users/$(whoami)/.assistant/skills/
+cp -r databricks-dbr-migration /Workspace/Users/$(whoami)/.assistant/skills/
+```
+
+---
+
+## Step 3: Run Agent on Each Job
+
+Open each flagged job and use this prompt:
+
+```
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, scan and fix this notebook for DBR 17.3 compatibility
+```
+
+### What the Agent Does
+
+| Action | Description |
 |--------|-------------|
-| **[workspace-profiler.py](workspace-profiler.py)** | Databricks notebook that scans **all jobs and workspace notebooks** for breaking changes |
-
-**Output includes:**
-- Delta table with all findings
-- CSV export for Excel analysis
-- HTML report with severity breakdown
-- Clickable links to notebooks and jobs
-- Duplicate temp view detection
+| **Auto-fixes** | Applies safe fixes (input_file_name, ! syntax, Scala changes) |
+| **Flags manual review** | Items you need to decide on (temp view patterns, UDF patterns) |
+| **Flags config items** | Settings to test (Auto Loader, timestamps) |
 
 ---
 
-## 🚀 Quick Start for POD Teams
+## Step 4: Review & Implement
 
+Review everything the agent did:
+
+### Auto-Fixes (Agent Applied)
+- Check the code changes look correct
+- Verify syntax is valid
+
+### Manual Review Items (Agent Flagged)
+- Read the explanation
+- Decide if change is needed
+- Implement if yes
+
+### Config Suggestions (Agent Flagged)
+- Note suggested configs
+- Test on new DBR to see if needed
+- Add config only if behavior differs
+
+---
+
+## Step 5: Test & Log Issues
+
+### Test the Job
+Run the job on the new DBR version:
+- Job completes successfully?
+- Output is correct?
+- Performance is acceptable?
+
+### Log Issues to Tracker
+
+**If ANY issues found, log to the central tracker:**
+
+| Issue Type | When to Log |
+|------------|-------------|
+| **Error** | Job fails, syntax error, runtime exception |
+| **Data Quality** | Output differs, wrong results |
+| **Performance** | Job runs >10% slower |
+| **Regression** | Behavior changed unexpectedly |
+
+---
+
+## Central Issue Tracker
+
+> **📍 Tracker Link:** `<<ADD_TRACKER_LINK_HERE>>`
+
+### Tracker Fields
+
+| Field | Example |
+|-------|---------|
+| Issue ID | ISS-001 |
+| Date | 2026-01-26 |
+| POD | Your team |
+| Job Name | daily_etl_pipeline |
+| Issue Type | Error / Data Quality / Performance / Regression |
+| Description | Job fails with AnalysisException |
+| Error Message | Column 'x' not found |
+| Severity | Critical / High / Medium / Low |
+| Status | New / Investigating / Resolved |
+| Resolution | How it was fixed |
+
+### Severity Guidelines
+
+| Severity | Criteria |
+|----------|----------|
+| Critical | Production-blocking, data corruption |
+| High | Major functionality broken, >50% slower |
+| Medium | Functionality impacted, 10-50% slower |
+| Low | Minor issue, workaround available |
+
+---
+
+## Sign-Off Process
+
+### When All Jobs Pass
+
+1. **Verify completion:**
+   - All flagged jobs tested
+   - All issues resolved or logged
+   - Performance acceptable
+
+2. **POD Lead signs off** in tracker
+
+3. **Send confirmation email** to BAU team
+
+---
+
+## Common Prompts
+
+| Task | Prompt |
+|------|--------|
+| Scan & Fix | `Using the DBR migration skill at [path], scan and fix this notebook for DBR 17.3 compatibility` |
+| Scan Only | `Using the DBR migration skill, scan this notebook for DBR 17.3 breaking changes` |
+| Fix Specific | `Using the DBR migration skill, fix all input_file_name() usages` |
+| Validate | `Using the DBR migration skill, validate that all breaking changes have been fixed` |
+| Explain | `Using the DBR migration skill, explain BC-17.3-001` |
+
+---
+
+## What the Agent Fixes
+
+### Auto-Fix Patterns (7)
+
+| Pattern | Fix |
+|---------|-----|
+| `input_file_name()` | → `_metadata.file_name` |
+| `IF !`, `IS !`, `! IN` | → `NOT` syntax |
+| `JavaConverters` (Scala) | → `CollectionConverters` |
+| `.to[List]` (Scala) | → `.to(List)` |
+| `TraversableOnce` | → `IterableOnce` |
+| `Traversable` | → `Iterable` |
+| `Stream.from()` | → `LazyList.from()` |
+
+### Manual Review Patterns (6)
+
+| Pattern | Why Flagged |
+|---------|-------------|
+| `VariantType()` in UDF | Check target version (OK in 16.4+) |
+| VIEW column types | Not allowed in 15.4+ |
+| Temp view reuse | Spark Connect compatibility |
+| UDF external variables | Variable capture timing |
+| Schema access in loops | Performance in Spark Connect |
+| Try/except around transforms | Error timing in Spark Connect |
+
+### Config Suggestions (4)
+
+| Pattern | Config to Test |
+|---------|----------------|
+| Auto Loader | `cloudFiles.useIncrementalListing` |
+| Parquet timestamps | `spark.sql.parquet.inferTimestampNTZ.enabled` |
+| JDBC reads | `spark.sql.legacy.jdbc.useNullCalendar` |
+| materializeSource | Remove `none` option |
+
+---
+
+## Troubleshooting
+
+### Agent Not Finding Skill
+Include the full path in your prompt:
 ```
-Step 1: Review your jobs in "DBR Upgrade-Jobs list_16.4.xlsx"
-        └─ Filter: Serverless (Y/N) = "N" to get your job list
+Using the DBR migration skill at /Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/, ...
+```
 
-Step 2: For each job, run on DBR 16.4 in UAT
-        └─ Document: Success/Failure, Duration
+### Agent Missed Something
+Re-run with specific focus:
+```
+Using the DBR migration skill, specifically check for [pattern] in this notebook
+```
 
-Step 3: If output validation required (see criteria doc)
-        └─ Compare output: 13.3 vs 16.4
-        └─ Screenshot successful validation
-
-Step 4: Log any issues
-        └─ Failures → Issue Tracker
-        └─ Performance slowdown → Performance Tracker
-
-Step 5: Complete testing → POD Lead signs off
-        └─ Update Sign-Off Tracker
-        └─ Send confirmation email to BAU
+### Fix Caused Syntax Error
+Ask agent to review:
+```
+The fix on line X caused a syntax error, please review and correct
 ```
 
 ---
 
-## 📊 Trackers
+## References
 
-| Tracker | Purpose | Status |
-|---------|---------|--------|
-| Issue Tracker | Log job failures and errors | *(Create using [template](08-tracker-templates.md#issue-tracker))* |
-| Performance Tracker | Log performance regressions | *(Create using [template](08-tracker-templates.md#performance-tracker))* |
-| Sign-Off Tracker | Track POD sign-off status | *(Create using [template](08-tracker-templates.md#sign-off-tracker))* |
+- **[BREAKING-CHANGES-EXPLAINED.md](BREAKING-CHANGES-EXPLAINED.md)** - Technical details on each breaking change
+- **[SKILL.md](../databricks-dbr-migration/SKILL.md)** - Agent skill definition
+- **[workspace-profiler.py](workspace-profiler.py)** - Profiler script
 
----
-
-## 📅 Timeline
-
-| Phase | Dates | Responsible |
-|-------|-------|-------------|
-| Testing & Validation | *TBD - Coordinate with BAU* | POD Teams |
-| Sign-Off Collection | *TBD - After testing complete* | POD Leads |
-| Production Migration (16.4) | *TBD - After all sign-offs* | BAU/DevOps |
-| Migration to 17.3 LTS | *TBD - Post 16.4 stabilization* | BAU (no POD effort) |
-
-> **Note:** Actual dates will be communicated by your BAU team. Contact them for the current migration schedule.
+### External Links
+- [Databricks Runtime Release Notes](https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/)
+- [Spark Connect vs Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic)
+- [Agent Skills Documentation](https://learn.microsoft.com/en-us/azure/databricks/assistant/skills)
 
 ---
 
-## 📌 Key Information
-
-### What PODs Need to Do
-
-1. **Test all non-serverless jobs** on DBR 16.4 in UAT
-2. **Validate output** for jobs that meet the [criteria](06-output-validation-criteria.md)
-3. **Log issues** in the trackers
-4. **Sign off** when complete
-
-### What BAU/DevOps Will Do
-
-1. Migrate all signed-off jobs to production on 16.4
-2. Migrate all 16.4 jobs to 17.3 LTS (**no POD effort required**)
-3. Provide support during testing phase
-
----
-
-## 📖 Migration Path
-
-```
-DBR 13.3 LTS → DBR 16.4 LTS → DBR 17.3 LTS
-   Spark 3.4.1    Spark 3.5.2    Spark 4.0.0
-                     ↑               ↑
-              POD Testing      BAU Handles
-                Required        (No POD effort)
-```
-
-**Critical Changes in 16.4:**
-- Scala 2.13 migration (requires Scala code changes)
-- Data source cache behavior change
-- Collection API changes
-
-**Critical Changes in 17.3 (BAU will handle):**
-- `input_file_name()` removed → `_metadata.file_name`
-- Auto Loader incremental listing default changed
-- Spark 4.0 API changes
-
----
-
-## 🆘 Support
+## Support
 
 | Type | Contact |
 |------|---------|
-| Testing Questions | *Your team's designated support channel* |
-| Technical Issues | *BAU/Platform team distribution list* |
-| Escalation | *Your POD lead or BAU manager* |
-
-> **Note:** Update the contact information above with your organization's actual support channels.
+| Testing Questions | Your team's support channel |
+| Technical Issues | BAU/Platform team |
+| Escalation | POD lead or BAU manager |
 
 ---
 
-## 📚 References
-
-- [Extend Assistant with Agent Skills - Microsoft Learn](https://learn.microsoft.com/en-us/azure/databricks/assistant/skills)
-- [Compare Spark Connect to Spark Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic)
-- [Databricks Runtime Release Notes](https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/)
-
----
-
-*Last Updated: January 2026*  
-*Owner: Platform/BAU Team*
+*Last Updated: January 2026*
