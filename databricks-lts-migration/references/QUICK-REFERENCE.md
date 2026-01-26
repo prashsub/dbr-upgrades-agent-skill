@@ -12,10 +12,11 @@ A condensed reference for all breaking changes. Use this to quickly explain issu
 ✅ `df.withColumn("src", col("_metadata.file_name"))`  
 ✅ SQL: `SELECT _metadata.file_name FROM ...`
 
-### BC-15.4-001: VARIANT in Python UDF
-❌ `@udf(returnType=VariantType())`  
+### BC-15.4-001: VARIANT in Python UDF *(FIXED in 16.4)*
+❌ `@udf(returnType=VariantType())` *(fails on 15.4 only)*  
 🔍 `VariantType\s*\(`  
-✅ Use `StringType()` + `json.dumps()`, then `parse_json()` later
+✅ **DBR 16.4+**: Works! VARIANT UDFs now supported  
+✅ **DBR 15.4 only**: Use `StringType()` + `json.dumps()`, then `parse_json()` later
 
 ### BC-16.4-001a: Scala JavaConverters
 ❌ `import scala.collection.JavaConverters._`  

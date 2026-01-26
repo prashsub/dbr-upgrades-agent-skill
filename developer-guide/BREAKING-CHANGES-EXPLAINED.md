@@ -12,7 +12,7 @@ This guide explains each breaking change in simple terms, with examples showing:
 | Severity | ID | Name | DBR Version |
 |----------|-----|------|-------------|
 | 🔴 HIGH | [BC-17.3-001](#bc-173-001-input_file_name-removed) | input_file_name() Removed | 17.3 |
-| 🔴 HIGH | [BC-15.4-001](#bc-154-001-variant-type-in-python-udf) | VARIANT Type in Python UDF | 15.4 |
+| 🟢 LOW | [BC-15.4-001](#bc-154-001-variant-type-in-python-udf) | VARIANT Type in Python UDF *(15.4 only, fixed in 16.4)* | 15.4 |
 | 🔴 HIGH | [BC-16.4-001a](#bc-164-001a-scala-javaconverters) | Scala JavaConverters | 16.4 |
 | 🔴 HIGH | [BC-16.4-001c](#bc-164-001c-scala-traversableonce) | Scala TraversableOnce | 16.4 |
 | 🔴 HIGH | [BC-16.4-001d](#bc-164-001d-scala-traversable) | Scala Traversable | 16.4 |
@@ -128,9 +128,11 @@ SELECT _metadata.file_name as source_file, * FROM parquet.`/data/files/`
 
 ### BC-15.4-001: VARIANT Type in Python UDF
 
-**What Changed:** The `VARIANT` data type cannot be used as input or output for Python UDFs, UDAFs, or UDTFs.
+**What Changed:** The `VARIANT` data type cannot be used as input or output for Python UDFs, UDAFs, or UDTFs **in DBR 15.4 only**.
 
-**Why It Matters:** Attempting to use `VariantType()` in a UDF will throw a runtime error.
+> ✅ **RESOLVED in DBR 16.4:** VARIANT type is now fully supported in Python UDFs! See [official documentation](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf).
+
+**Why It Matters:** Attempting to use `VariantType()` in a UDF will throw a runtime error **on DBR 15.4 only**. If you're upgrading directly to 16.4 or 17.3, no action needed.
 
 #### ❌ The Problem
 
@@ -138,7 +140,7 @@ SELECT _metadata.file_name as source_file, * FROM parquet.`/data/files/`
 from pyspark.sql.functions import udf
 from pyspark.sql.types import VariantType
 
-# This will fail in DBR 15.4+
+# This will fail in DBR 15.4 only (works in 16.4+)
 @udf(returnType=VariantType())
 def create_metadata(value):
     return {"key": value, "timestamp": "2024-01-01"}
@@ -787,6 +789,370 @@ for col_name in cached_columns:
 | **BC-SC-002** | ❌ | ✅ Flagged for review |
 | **BC-SC-003** | ❌ | ✅ Flagged for review |
 | **BC-SC-004** | ❌ | ✅ Flagged for review |
+| **BC-13.3-002** | ❌ | ⚙️ Config setting |
+| **BC-15.4-002** | ❌ | ⚙️ Config setting |
+| **BC-16.4-004** | ❌ | ⚙️ Config setting |
+| **BC-17.3-002** | ❌ | ⚙️ Config setting |
+
+---
+
+## 📋 Developer Action Guide: Manual Review Items
+
+When the scanner flags something for **manual review**, follow these step-by-step guides.
+
+---
+
+### 🔍 Manual Review: BC-SC-002 (Temp View Name Reuse)
+
+**Why it's flagged:** The same temp view name appears multiple times in your code.
+
+**Step-by-Step Review:**
+
+1. **Check if views are in a loop or function called multiple times:**
+   ```python
+   # IF you see this pattern → FIX NEEDED
+   for item in items:
+       df.createOrReplaceTempView("temp_view")  # ⚠️ Same name reused!
+   ```
+
+2. **Check if views are independent operations:**
+   ```python
+   # IF you see this pattern → LIKELY OKAY (but verify)
+   df1.createOrReplaceTempView("customers")
+   # ... other code ...
+   df2.createOrReplaceTempView("orders")  # Different name = OK
+   ```
+
+3. **Decision Matrix:**
+
+   | Scenario | Action |
+   |----------|--------|
+   | Same name in a loop | ✅ **FIX**: Add UUID to name |
+   | Same name in a function called multiple times | ✅ **FIX**: Add UUID to name |
+   | Different names for different purposes | ❌ **No action needed** |
+   | View created once and used throughout | ❌ **No action needed** |
+
+4. **Apply the fix:**
+   ```python
+   import uuid
+   unique_name = f"temp_view_{uuid.uuid4().hex[:8]}"
+   df.createOrReplaceTempView(unique_name)
+   ```
+
+---
+
+### 🔍 Manual Review: BC-SC-003 (UDF External Variable Capture)
+
+**Why it's flagged:** Your UDF may be capturing variables that could change.
+
+**Step-by-Step Review:**
+
+1. **Look at the UDF code - does it reference variables defined OUTSIDE the function?**
+   ```python
+   threshold = 100  # ← External variable
+   
+   @udf("boolean")
+   def is_above_threshold(value):
+       return value > threshold  # ← References external variable!
+   ```
+
+2. **Decision Matrix:**
+
+   | What the UDF references | Action |
+   |------------------------|--------|
+   | Only function parameters | ❌ **No action needed** |
+   | Constants (hardcoded values) | ❌ **No action needed** |
+   | External variables that NEVER change | ⚠️ **Consider fixing** (defensive) |
+   | External variables that CHANGE after UDF definition | ✅ **FIX**: Use function factory |
+
+3. **Apply the fix (Function Factory Pattern):**
+   ```python
+   # BEFORE (problematic in Spark Connect)
+   threshold = 100
+   @udf("boolean")
+   def is_above(value):
+       return value > threshold
+   
+   # AFTER (safe)
+   def make_threshold_udf(threshold_value):
+       @udf("boolean")
+       def is_above(value):
+           return value > threshold_value  # Captured at creation
+       return is_above
+   
+   is_above_100 = make_threshold_udf(100)
+   ```
+
+---
+
+### 🔍 Manual Review: BC-SC-004 (Schema Access in Loops)
+
+**Why it's flagged:** You're accessing `df.columns`, `df.schema`, or `df.dtypes`.
+
+**Step-by-Step Review:**
+
+1. **Check if schema access is INSIDE a loop:**
+   ```python
+   # PROBLEMATIC - N RPC calls in Spark Connect!
+   for i in range(100):
+       if "col_name" in df.columns:  # ← Called 100 times!
+           ...
+   ```
+
+2. **Check if schema access is OUTSIDE loops:**
+   ```python
+   # OKAY - Only 1 RPC call
+   columns = df.columns  # ← Called once
+   for col in columns:
+       ...
+   ```
+
+3. **Decision Matrix:**
+
+   | Location | Action |
+   |----------|--------|
+   | Inside a `for`/`while` loop | ✅ **FIX**: Cache outside loop |
+   | Inside a function called repeatedly | ✅ **FIX**: Cache before calls |
+   | At module/notebook top level (once) | ❌ **No action needed** |
+   | In a conditional that runs once | ❌ **No action needed** |
+
+4. **Apply the fix:**
+   ```python
+   # BEFORE
+   for col in df.columns:  # RPC on each iteration
+       if col in df.columns:  # Another RPC!
+           process(col)
+   
+   # AFTER
+   cached_columns = df.columns  # One RPC
+   for col in cached_columns:
+       if col in cached_columns:  # No RPC
+           process(col)
+   ```
+
+---
+
+### 🔍 Manual Review: BC-15.4-004 (View Column Type Definition)
+
+**Why it's flagged:** Your `CREATE VIEW` statement has column type definitions.
+
+**Step-by-Step Review:**
+
+1. **Identify the problematic syntax:**
+   ```sql
+   -- Look for types, NOT NULL, or DEFAULT in the column list
+   CREATE VIEW my_view (
+       id INT,           -- ← Type definition (not allowed)
+       name STRING NOT NULL,  -- ← NOT NULL constraint (not allowed)
+       value DOUBLE DEFAULT 0.0  -- ← DEFAULT value (not allowed)
+   ) AS SELECT ...
+   ```
+
+2. **Apply the fix - Move constraints to the SELECT:**
+   ```sql
+   -- AFTER: No column definitions, constraints in query
+   CREATE VIEW my_view AS
+   SELECT
+       CAST(id AS INT) as id,
+       name,
+       COALESCE(value, 0.0) as value
+   FROM source_table
+   WHERE name IS NOT NULL;  -- Replaces NOT NULL constraint
+   ```
+
+---
+
+## ⚙️ Developer Action Guide: Configuration Settings
+
+These breaking changes are about **default behavior changes**. You may not need to do anything if your code works correctly.
+
+### When to Add Configuration Settings
+
+| Scenario | Action |
+|----------|--------|
+| Code works fine on new DBR | ❌ **No config needed** |
+| Code behaves differently (but correctly) | ❌ **No config needed** (adapt to new behavior) |
+| Code breaks or gives wrong results | ✅ **Add config to restore old behavior** |
+| You want guaranteed consistent behavior across DBR versions | ✅ **Add config explicitly** |
+
+---
+
+### ⚙️ Config: BC-13.3-002 (Parquet Timestamp NTZ)
+
+**What changed:** How Parquet files infer `TIMESTAMP_NTZ` type.
+
+**Test if you need this:**
+```python
+# Read a Parquet file and check timestamp columns
+df = spark.read.parquet("/path/to/data")
+df.printSchema()  # Check if timestamp types are what you expect
+```
+
+**Where to add the config:**
+
+| Location | How to Add |
+|----------|------------|
+| **Notebook (session)** | `spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")` |
+| **Cluster config** | Add to Spark config: `spark.sql.parquet.inferTimestampNTZ.enabled false` |
+| **Job config** | Add to job's Spark configuration in the job JSON/UI |
+| **Init script** | Add `spark.conf.set(...)` to cluster's init script |
+
+**Full example:**
+```python
+# At the START of your notebook/job
+spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")
+
+# Then run your Parquet reads
+df = spark.read.parquet("/path/to/data")
+```
+
+---
+
+### ⚙️ Config: BC-15.4-002 (JDBC useNullCalendar)
+
+**What changed:** Default for `spark.sql.legacy.jdbc.useNullCalendar` changed to `true`.
+
+**Test if you need this:**
+```python
+# Read from JDBC and check timestamp values
+df = spark.read.jdbc(url, table)
+df.select("timestamp_column").show()
+# Compare with expected values from your source system
+```
+
+**Apply the fix (only if timestamps are wrong):**
+```python
+# To restore DBR 13.3 behavior:
+spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
+
+# Then run your JDBC reads
+df = spark.read.jdbc(url, table)
+```
+
+---
+
+### ⚙️ Config: BC-16.4-004 (MERGE materializeSource=none)
+
+**What changed:** Setting `merge.materializeSource` to `none` now throws an error.
+
+**Find the problematic code:**
+```python
+# Search your code for this line - it will FAIL:
+spark.conf.set("spark.databricks.delta.merge.materializeSource", "none")
+```
+
+**Apply the fix:**
+```python
+# Option 1: Remove the setting entirely (RECOMMENDED)
+# Just delete the spark.conf.set line - let Spark use default
+
+# Option 2: Change to "auto"
+spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")
+```
+
+---
+
+### ⚙️ Config: BC-17.3-002 (Auto Loader Incremental Listing)
+
+**What changed:** Default for `cloudFiles.useIncrementalListing` changed from `auto` to `false`.
+
+**Test if you need this:**
+1. Run your Auto Loader job on new DBR version
+2. Check if performance is acceptable
+3. Check if all files are being processed correctly
+
+**If you need the old behavior (for performance):**
+```python
+df = (spark.readStream
+    .format("cloudFiles")
+    .option("cloudFiles.format", "parquet")
+    .option("cloudFiles.useIncrementalListing", "auto")  # ← Add this line
+    .schema(schema)
+    .load(path)
+)
+```
+
+---
+
+## 🔄 Complete Developer Workflow
+
+### Step 1: Run the Scanner
+```bash
+# Using Databricks Assistant or locally
+python scan-breaking-changes.py /path/to/notebooks --target-version 17.3
+```
+
+### Step 2: Review the Report
+
+| Finding Type | What It Means | Developer Action |
+|--------------|---------------|------------------|
+| 🔴 **HIGH + AUTO-FIX** | Will break, can be auto-fixed | Run `apply-fixes.py` |
+| 🟡 **MEDIUM + MANUAL** | May break, needs review | Follow guides above |
+| ⚙️ **CONFIG** | Behavior changed | Test first, add config if needed |
+
+### Step 3: Apply Auto-Fixes
+```bash
+# For auto-fixable issues
+python apply-fixes.py /path/to/notebooks --target-version 17.3
+```
+
+### Step 4: Manual Review Checklist
+
+For each **MANUAL REVIEW** finding:
+
+- [ ] Locate the flagged line in your code
+- [ ] Identify which category (BC-SC-002, BC-SC-003, BC-SC-004, or BC-15.4-004)
+- [ ] Follow the decision matrix in this guide
+- [ ] If fix needed, apply the fix pattern shown
+- [ ] If no fix needed, document why (false positive)
+- [ ] Mark as reviewed in your tracking system
+
+### Step 5: Test Configuration Settings
+
+For each **CONFIG** finding:
+
+- [ ] Run your code on the new DBR version **without** adding config
+- [ ] Check if results are correct
+- [ ] If results differ, decide: adapt code OR add config
+- [ ] If adding config, choose where (notebook, cluster, or job level)
+- [ ] Document any config settings added
+
+### Step 6: Validate
+```bash
+# Run validation to ensure all issues are resolved
+python validate-migration.py /path/to/notebooks
+```
+
+---
+
+## 📊 Summary: Action by Category
+
+| Category | Patterns | Primary Action |
+|----------|----------|----------------|
+| **Auto-Fix** | 9 patterns | Run `apply-fixes.py` |
+| **Manual Review** | 4 patterns | Follow guides in this document |
+| **Config Settings** | 4 patterns | Test first, add config only if needed |
+
+### Auto-Fix Patterns (9)
+- BC-17.3-001: `input_file_name()`
+- BC-15.4-003: `!` syntax for NOT
+- BC-16.4-001a: JavaConverters
+- BC-16.4-001b: `.to[Collection]`
+- BC-16.4-001c: TraversableOnce
+- BC-16.4-001d: Traversable
+- BC-16.4-001e: Stream → LazyList
+
+### Manual Review Patterns (4)
+- BC-SC-002: Temp view name reuse
+- BC-SC-003: UDF external variable capture
+- BC-SC-004: Schema access in loops
+- BC-15.4-004: View column type definition
+
+### Config Setting Patterns (4)
+- BC-13.3-002: Parquet Timestamp NTZ
+- BC-15.4-002: JDBC useNullCalendar
+- BC-16.4-004: MERGE materializeSource
+- BC-17.3-002: Auto Loader incremental listing
 
 ---
 

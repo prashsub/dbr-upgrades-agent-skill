@@ -53,10 +53,11 @@ Search for each pattern and report findings:
 grep -rn "input_file_name\s*(" --include="*.py" --include="*.sql" --include="*.scala" /path/to/scan
 ```
 
-**BC-15.4-001: VARIANT in Python UDF [FAILS in 15.4+]**
+**BC-15.4-001: VARIANT in Python UDF [FAILS in 15.4 only, FIXED in 16.4]**
 ```bash
 grep -rn "VariantType" --include="*.py" /path/to/scan
 ```
+> ✅ Note: VARIANT UDFs now work in DBR 16.4+!
 
 **BC-16.4-001: Scala JavaConverters [DEPRECATED in 16.4]**
 ```bash
@@ -150,9 +151,11 @@ df.select(col("*"), col("_metadata.file_name").as("source"))
 | ` ! LIKE ` | ` NOT LIKE ` |
 | ` ! EXISTS` | ` NOT EXISTS` |
 
-### Fix BC-15.4-001: VARIANT in Python UDF
+### Fix BC-15.4-001: VARIANT in Python UDF (15.4 only)
 
-**Convert VARIANT UDF to STRING with JSON:**
+> ✅ **No fix needed for DBR 16.4+** - VARIANT UDFs now work! See [official docs](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf).
+
+**For DBR 15.4 only - Convert VARIANT UDF to STRING with JSON:**
 ```python
 # BEFORE
 from pyspark.sql.types import VariantType
@@ -300,7 +303,7 @@ All breaking changes resolved
 | ID | Severity | Pattern | Fix |
 |----|----------|---------|-----|
 | BC-17.3-001 | HIGH | `input_file_name()` | `_metadata.file_name` |
-| BC-15.4-001 | HIGH | `VariantType` in Python UDF | Use STRING + JSON |
+| BC-15.4-001 | LOW | `VariantType` in Python UDF *(15.4 only - fixed in 16.4)* | Upgrade to 16.4+ or use STRING + JSON |
 | BC-16.4-001 | HIGH | `JavaConverters` | `CollectionConverters` |
 | BC-13.3-001 | HIGH | MERGE/UPDATE overflow | Widen column type |
 | BC-15.4-003 | MEDIUM | `IF !`, `IS !`, `! IN` | Use `NOT` |

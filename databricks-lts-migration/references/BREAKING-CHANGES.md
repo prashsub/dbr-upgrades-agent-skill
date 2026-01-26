@@ -201,18 +201,21 @@ Configure JAR libraries directly in cluster configuration.
 
 ### BC-15.4-001: VARIANT Type with Python UDF/UDAF/UDTF
 
-**Severity:** HIGH (BREAKING)  
+**Severity:** LOW (BREAKING in 15.4 only - **FIXED in DBR 16.4**)  
 **Category:** Python UDF
 
+> ✅ **RESOLVED in DBR 16.4:** VARIANT type is now fully supported in Python UDFs!  
+> See: https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf
+
 **What Changed:**  
-Calling any Python UDF, UDAF, or UDTF that uses `VARIANT` type as an argument or return value throws an exception.
+In DBR 15.4 only, calling any Python UDF, UDAF, or UDTF that uses `VARIANT` type as an argument or return value throws an exception. **This restriction was lifted in DBR 16.4.**
 
-**Error Message:**
+**Error Message (15.4 only):**
 ```
-AnalysisException: VARIANT type is not supported in Python UDFs
+DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE: Cannot resolve "..." due to data type mismatch: UDFs do not support 'VARIANT' as an output data type
 ```
 
-**Impact:**  
+**Impact (DBR 15.4 only):**  
 - All Python functions accepting VARIANT input
 - All Python functions returning VARIANT output
 - Semi-structured data processing in Python

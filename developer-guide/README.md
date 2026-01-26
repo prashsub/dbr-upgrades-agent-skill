@@ -11,9 +11,13 @@ This guide provides step-by-step instructions for developers to upgrade Databric
 | Document | Description |
 |----------|-------------|
 | **[07-testing-validation-signoff-guide.md](07-testing-validation-signoff-guide.md)** | ⭐ **Main Guide** - Step-by-step testing & sign-off instructions |
-| **[BREAKING-CHANGES-EXPLAINED.md](BREAKING-CHANGES-EXPLAINED.md)** | 📖 **Learn the changes** - Every breaking change explained with examples |
+| **[BREAKING-CHANGES-EXPLAINED.md](BREAKING-CHANGES-EXPLAINED.md)** | 📖 **Learn the changes** - Every breaking change explained + **Developer Action Guides** |
 | [06-output-validation-criteria.md](06-output-validation-criteria.md) | Criteria for which jobs need output comparison |
 | [08-tracker-templates.md](08-tracker-templates.md) | Templates for Issue, Performance, and Sign-Off trackers |
+
+> 💡 **New!** `BREAKING-CHANGES-EXPLAINED.md` now includes **step-by-step guides** for:
+> - Manual Review items (what to check, decision matrices, fix patterns)
+> - Configuration Settings (when to add, where to add, how to test)
 
 ### Technical Deep-Dives
 

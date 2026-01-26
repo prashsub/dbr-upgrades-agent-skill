@@ -87,13 +87,13 @@ BREAKING_PATTERNS = [
     ),
     BreakingChangePattern(
         id="BC-15.4-001",
-        name="VARIANT Type in Python UDF",
-        severity="HIGH",
+        name="VARIANT Type in Python UDF (15.4 only)",
+        severity="LOW",
         introduced_in="15.4",
         pattern=r"VariantType\s*\(",
         file_types=[".py"],
-        description="VARIANT type is not supported in Python UDFs/UDAFs/UDTFs",
-        remediation="Use STRING type with JSON parsing instead"
+        description="VARIANT type not supported in Python UDFs on DBR 15.4 only. RESOLVED in DBR 16.4+ - VARIANT UDFs now work!",
+        remediation="Upgrade to DBR 16.4+, or use STRING type with JSON parsing on 15.4"
     ),
     BreakingChangePattern(
         id="BC-16.4-001a",

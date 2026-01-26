@@ -76,10 +76,10 @@ This document catalogs all **breaking changes** and **significant behavioral cha
 ### 🔴 Databricks Runtime 15.4 LTS Breaking Changes
 
 #### 1. VARIANT Type with Python UDF/UDAF/UDTF
-- **Severity**: HIGH (Breaking)
-- **Description**: Calling any Python UDF, UDAF, or UDTF that uses `VARIANT` type as an argument or return value now throws an exception.
-- **Impact**: All Python functions using VARIANT type
-- **Remediation**: Avoid using `VARIANT` type with Python UDFs/UDAFs/UDTFs; use alternative data types
+- **Severity**: LOW (Breaking in 15.4 only, **resolved in DBR 16.4**)
+- **Description**: Calling any Python UDF, UDAF, or UDTF that uses `VARIANT` type as an argument or return value throws an exception **in DBR 15.4 only**. ✅ **Fixed in DBR 16.4** - VARIANT UDFs are now fully supported.
+- **Impact**: All Python functions using VARIANT type (DBR 15.4 only)
+- **Remediation**: Upgrade to DBR 16.4+, or use STRING type with JSON serialization on 15.4
 
 #### 2. JDBC useNullCalendar Default Changed
 - **Severity**: MEDIUM
