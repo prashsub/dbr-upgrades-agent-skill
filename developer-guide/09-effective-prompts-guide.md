@@ -8,9 +8,23 @@ This guide provides ready-to-use prompts for efficiently running the DBR LTS Mig
 
 **IMPORTANT:** Before using any prompts in this guide, ensure the skill is properly installed.
 
+> 🔍 **Common Issue:** The agent may initially fail to find the skill if it's checking the wrong path. Databricks Workspace installations use `/Workspace/Users/` while local installations use `/Users/`. Make sure to verify the correct path for your environment below.
+
 ### Required Installation Location
 
-The skill **MUST** be installed in:
+The skill installation location depends on your environment:
+
+#### Option 1: Databricks Workspace (Recommended for Databricks)
+```
+/Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/
+```
+
+**Example:**
+```
+/Workspace/Users/prashanth.subrahmanyam@databricks.com/.assistant/skills/databricks-dbr-migration/
+```
+
+#### Option 2: Local Filesystem (for local development)
 ```
 /Users/{your-username}/.assistant/skills/databricks-dbr-migration/
 ```
@@ -18,6 +32,13 @@ The skill **MUST** be installed in:
 ### Verify Skill Installation
 
 **Step 1: Check if the skill folder exists**
+
+**For Databricks Workspace:**
+```bash
+ls -la /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/
+```
+
+**For Local Filesystem:**
 ```bash
 ls -la ~/.assistant/skills/databricks-dbr-migration/
 ```
@@ -38,6 +59,25 @@ What skills do you have access to?
 **Expected response:** The assistant should list `databricks-dbr-migration` among available skills.
 
 ### If Skill Is Not Installed
+
+#### For Databricks Workspace:
+
+1. **Create the skills directory (if needed):**
+   ```bash
+   mkdir -p /Workspace/Users/$(whoami)/.assistant/skills/
+   ```
+
+2. **Copy the skill folder:**
+   ```bash
+   cp -r databricks-dbr-migration /Workspace/Users/$(whoami)/.assistant/skills/
+   ```
+
+3. **Verify installation:**
+   ```bash
+   ls -la /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/SKILL.md
+   ```
+
+#### For Local Filesystem:
 
 1. **Copy the skill folder:**
    ```bash
@@ -539,8 +579,15 @@ What agent skills are currently available?
 **Expected:** You should see `databricks-dbr-migration` in the list.
 
 **If not listed:**
+
+**For Databricks Workspace:**
+1. Check installation: `ls -la /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/`
+2. Verify SKILL.md: `cat /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5`
+3. Restart Databricks Assistant
+
+**For Local Filesystem:**
 1. Check installation: `ls ~/.assistant/skills/databricks-dbr-migration/`
-2. Verify SKILL.md exists: `cat ~/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5`
+2. Verify SKILL.md: `cat ~/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5`
 3. Restart Databricks Assistant
 
 ### Using @-mentions
@@ -611,7 +658,18 @@ Typical response times:
 - @databricks-dbr-migration doesn't autocomplete
 - Agent says "I can't find databricks-dbr-migration"
 
-**Solution 1: Verify Installation**
+**Solution 1: Verify Installation Path**
+
+**For Databricks Workspace:**
+```bash
+# Check if skill folder exists
+ls -la /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/
+
+# Verify SKILL.md exists
+cat /Workspace/Users/$(whoami)/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5
+```
+
+**For Local Filesystem:**
 ```bash
 # Check if skill folder exists
 ls -la ~/.assistant/skills/databricks-dbr-migration/
@@ -621,18 +679,40 @@ cat ~/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5
 ```
 
 **Solution 2: Reinstall the Skill**
+
+**For Databricks Workspace:**
+```bash
+# From repository root
+mkdir -p /Workspace/Users/$(whoami)/.assistant/skills/
+cp -r databricks-dbr-migration /Workspace/Users/$(whoami)/.assistant/skills/
+```
+
+**For Local Filesystem:**
 ```bash
 # From repository root
 cp -r databricks-dbr-migration ~/.assistant/skills/
 chmod -R 755 ~/.assistant/skills/databricks-dbr-migration/
 ```
 
-**Solution 3: Check Path**
-The skill MUST be in: `/Users/{username}/.assistant/skills/databricks-dbr-migration/`
+**Solution 3: Check Correct Path**
 
-Not in: `~/.databricks/skills/` ❌  
-Not in: `~/skills/` ❌  
-Not in: `/opt/skills/` ❌
+The skill MUST be in one of these locations:
+
+✅ **Databricks Workspace (Recommended):**
+```
+/Workspace/Users/{your-email}/.assistant/skills/databricks-dbr-migration/
+```
+
+✅ **Local Filesystem:**
+```
+/Users/{username}/.assistant/skills/databricks-dbr-migration/
+```
+
+❌ **Incorrect paths:**
+- `~/.databricks/skills/`
+- `~/skills/`
+- `/opt/skills/`
+- `/databricks/skills/`
 
 **Solution 4: Ask Assistant to List Skills**
 ```
