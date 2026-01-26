@@ -5,9 +5,9 @@ license: Apache-2.0
 compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
-  databricks-skill-version: "2.0.0"
+  databricks-skill-version: "3.0.0"
   databricks-skill-category: platform-migration
-  databricks-skill-last-updated: "2026-01-23"
+  databricks-skill-last-updated: "2026-01-26"
 allowed-tools: Read Write Bash(grep:*) Bash(find:*) Bash(python:*)
 ---
 
@@ -17,9 +17,51 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 
 ## Agent Capabilities
 
-1. **SCAN** - Find breaking changes in code
-2. **FIX** - Apply automatic remediations
-3. **VALIDATE** - Verify fixes are correct
+1. **SCAN** - Find ALL breaking changes in code
+2. **FIX** - Apply automatic remediations (7 patterns)
+3. **FLAG** - Explicitly flag items requiring manual review (6 patterns) or configuration testing (4 patterns)
+4. **VALIDATE** - Verify fixes are correct
+
+---
+
+## CRITICAL: Three Categories of Findings
+
+When scanning code, categorize ALL findings into these three categories and handle them appropriately:
+
+### 🔴 Category 1: AUTO-FIX (7 patterns)
+**Action: Automatically apply the fix**
+
+| ID | Pattern | Fix |
+|----|---------|-----|
+| BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |
+| BC-15.4-003 | `IF !`, `IS !`, `! IN`, etc. | Replace `!` with `NOT` |
+| BC-16.4-001a | `JavaConverters` | Replace with `CollectionConverters` |
+| BC-16.4-001b | `.to[List]` | Replace with `.to(List)` |
+| BC-16.4-001c | `TraversableOnce` | Replace with `IterableOnce` |
+| BC-16.4-001d | `Traversable` | Replace with `Iterable` |
+| BC-16.4-001e | `Stream.from()` | Replace with `LazyList.from()` |
+
+### 🟡 Category 2: MANUAL REVIEW (6 patterns)
+**Action: FLAG for developer review with specific guidance**
+
+| ID | Pattern | Flag Message |
+|----|---------|--------------|
+| BC-15.4-001 | `VariantType()` in UDF | **FLAG:** VARIANT UDFs fail on DBR 15.4 only. If upgrading to 16.4+, no action needed. For 15.4, use `StringType` + `json.dumps()` |
+| BC-15.4-004 | `CREATE VIEW (col TYPE)` | **FLAG:** Column types in VIEW not allowed in 15.4+. Remove types, use CAST in SELECT |
+| BC-SC-001 | try/except around DataFrame transforms | **FLAG:** In Spark Connect, errors appear at action time, not transform time. Add `_ = df.columns` after transforms for early validation |
+| BC-SC-002 | Same temp view name used multiple times | **FLAG:** In Spark Connect, view name reuse causes data conflicts. Add UUID: `f"view_{uuid.uuid4().hex[:8]}"` |
+| BC-SC-003 | UDF referencing external variables | **FLAG:** In Spark Connect, UDFs capture variables at execution time. Use function factory pattern |
+| BC-SC-004 | `df.columns` / `df.schema` in loops | **FLAG:** In Spark Connect, schema access triggers RPC. Cache outside loop: `cols = df.columns` |
+
+### ⚙️ Category 3: CONFIG CHECK (4 patterns)
+**Action: FLAG for testing - only add config if results differ**
+
+| ID | Pattern | Flag Message |
+|----|---------|--------------|
+| BC-13.3-002 | Parquet with timestamps | **FLAG:** Test Parquet timestamp reads. If wrong, add: `spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")` |
+| BC-15.4-002 | JDBC reads | **FLAG:** Test JDBC timestamp reads. If wrong, add: `spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")` |
+| BC-16.4-004 | `materializeSource.*none` | **FLAG:** `materializeSource=none` not allowed in 16.4+. Remove or change to `auto` |
+| BC-17.3-002 | Auto Loader without explicit incremental | **FLAG:** Auto Loader default changed. Test performance; if slow, add: `.option("cloudFiles.useIncrementalListing", "auto")` |
 
 ---
 
@@ -78,24 +120,97 @@ grep -rn "\s!\s*IN\b" --include="*.sql" /path/to/scan
 grep -rn "\.to\[" --include="*.scala" /path/to/scan
 ```
 
-### Step 3: Report Findings
+### Step 3: Search for MANUAL REVIEW Patterns
+
+**BC-15.4-001: VARIANT in UDF (15.4 only - works in 16.4+)**
+```bash
+grep -rn "VariantType\s*(" --include="*.py" /path/to/scan
+```
+
+**BC-15.4-004: VIEW Column Type Definition**
+```bash
+grep -rn "CREATE.*VIEW.*\(.*\(INT\|STRING\|BIGINT\|DOUBLE\|NOT NULL\|DEFAULT\)" --include="*.sql" /path/to/scan
+```
+
+**BC-SC-002: Temp View Name Reuse**
+```bash
+grep -rn "createOrReplaceTempView\|createTempView" --include="*.py" --include="*.scala" /path/to/scan
+# Then check if same name appears multiple times in same file
+```
+
+**BC-SC-003: UDF with External Variables**
+```bash
+grep -rn "@udf" --include="*.py" /path/to/scan
+# Then check if function body references variables defined outside
+```
+
+**BC-SC-004: Schema Access in Loops**
+```bash
+grep -rn "\.columns\|\.schema\|\.dtypes" --include="*.py" /path/to/scan
+# Then check if inside for/while loop
+```
+
+### Step 4: Search for CONFIG CHECK Patterns
+
+**BC-13.3-002: Parquet Timestamp**
+```bash
+grep -rn "\.parquet\|read.parquet" --include="*.py" /path/to/scan
+```
+
+**BC-15.4-002: JDBC**
+```bash
+grep -rn "\.jdbc\|read.jdbc" --include="*.py" /path/to/scan
+```
+
+**BC-16.4-004: MERGE materializeSource=none**
+```bash
+grep -rn "materializeSource.*none" --include="*.py" --include="*.sql" /path/to/scan
+```
+
+**BC-17.3-002: Auto Loader**
+```bash
+grep -rn "cloudFiles" --include="*.py" /path/to/scan
+```
+
+### Step 5: Report Findings with THREE CATEGORIES
 
 Format findings as:
 ```
 ## Scan Results for [path]
 
-### HIGH Severity (Must Fix)
+### 🔴 AUTO-FIX (Will be fixed automatically)
 - BC-17.3-001: input_file_name() found in:
   - file.py:42: df.withColumn("src", input_file_name())
+  - **FIX:** Replace with `_metadata.file_name`
 
-### MEDIUM Severity (Should Fix)  
 - BC-15.4-003: '!' syntax found in:
   - query.sql:15: CREATE TABLE IF ! EXISTS
+  - **FIX:** Replace `!` with `NOT`
+
+### 🟡 MANUAL REVIEW REQUIRED
+- BC-SC-002: Temp view name reuse found in:
+  - etl.py:25: df.createOrReplaceTempView("batch")
+  - etl.py:35: df2.createOrReplaceTempView("batch")  <-- Same name!
+  - **REVIEW:** In Spark Connect, both DataFrames will see the latest data.
+  - **FIX IF NEEDED:** Add UUID: `f"batch_{uuid.uuid4().hex[:8]}"`
+
+- BC-SC-003: UDF with external variable found in:
+  - process.py:10: multiplier = 1.0
+  - process.py:12: @udf(...) def calc(x): return x * multiplier
+  - **REVIEW:** In Spark Connect, UDF captures `multiplier` at execution time, not definition.
+  - **FIX IF NEEDED:** Use function factory pattern
+
+### ⚙️ CONFIG CHECK (Test first, add config only if needed)
+- BC-17.3-002: Auto Loader found in:
+  - streaming.py:50: spark.readStream.format("cloudFiles")...
+  - **TEST:** Check if job performance is acceptable on new DBR
+  - **FIX IF NEEDED:** Add `.option("cloudFiles.useIncrementalListing", "auto")`
 
 ### Summary
 - Files scanned: X
-- HIGH severity: Y findings
-- MEDIUM severity: Z findings
+- 🔴 AUTO-FIX: Y findings (will be fixed)
+- 🟡 MANUAL REVIEW: Z findings (developer decision required)
+- ⚙️ CONFIG CHECK: W findings (test first)
 ```
 
 ---
@@ -375,29 +490,88 @@ for i in range(100):
 
 **Agent actions:**
 
-1. **SCAN**: Search for breaking patterns
-   ```bash
-   grep -rn "input_file_name" ./notebooks/
-   ```
-   Found: `etl_job.py:42`
+### 1. SCAN all patterns
+```bash
+# Auto-fix patterns
+grep -rn "input_file_name" ./notebooks/
+grep -rn "IF\s*!\|IS\s*!" ./notebooks/
 
-2. **FIX**: Apply remediation
-   - Read `etl_job.py`
-   - Replace `input_file_name()` with `_metadata.file_name`
-   - Write updated file
+# Manual review patterns  
+grep -rn "createOrReplaceTempView" ./notebooks/
+grep -rn "@udf" ./notebooks/
 
-3. **VALIDATE**: Verify fix
-   ```bash
-   grep -rn "input_file_name" ./notebooks/  # Should be empty
-   grep -rn "_metadata.file_name" ./notebooks/  # Should find replacement
-   ```
-   
-4. **REPORT**: 
-   ```
-   ✅ Fixed 1 breaking change in etl_job.py
-   - Replaced input_file_name() with _metadata.file_name at line 42
-   - Validated: No breaking patterns remain
-   ```
+# Config patterns
+grep -rn "cloudFiles" ./notebooks/
+```
+
+### 2. Categorize findings
+```
+Found:
+- etl_job.py:42 - input_file_name() [AUTO-FIX]
+- etl_job.py:55 - createOrReplaceTempView("batch") [MANUAL REVIEW - check for reuse]
+- etl_job.py:85 - createOrReplaceTempView("batch") [MANUAL REVIEW - same name reused!]
+- streaming.py:30 - cloudFiles [CONFIG CHECK]
+```
+
+### 3. FIX auto-fixable items
+- Read `etl_job.py`
+- Replace `input_file_name()` with `_metadata.file_name`
+- Write updated file
+
+### 4. FLAG manual review items
+```
+🟡 MANUAL REVIEW REQUIRED: BC-SC-002 in etl_job.py
+
+The temp view name "batch" is used on both line 55 and line 85.
+
+In Spark Connect (Serverless), this causes data conflicts - both DataFrames 
+will see the data from the LAST createOrReplaceTempView call.
+
+RECOMMENDATION: Add UUID to view names:
+  - Line 55: `f"batch_{uuid.uuid4().hex[:8]}"`
+  - Line 85: Use a different base name, or add UUID
+
+Do you want me to apply this fix? (Y/N)
+```
+
+### 5. FLAG config items
+```
+⚙️ CONFIG CHECK: BC-17.3-002 in streaming.py
+
+Auto Loader is used without explicit `useIncrementalListing` setting.
+The default changed from "auto" to "false" in DBR 17.3.
+
+TEST FIRST: Run the streaming job on DBR 17.3 and check performance.
+
+IF SLOWER: Add `.option("cloudFiles.useIncrementalListing", "auto")`
+
+No automatic fix applied - testing required first.
+```
+
+### 6. VALIDATE and REPORT
+```
+## Migration Report for ./notebooks/
+
+### ✅ Fixed (1 item)
+- BC-17.3-001 in etl_job.py:42 - Replaced input_file_name() with _metadata.file_name
+
+### 🟡 Flagged for Manual Review (1 item)
+- BC-SC-002 in etl_job.py:55,85 - Temp view "batch" reused
+  - Risk: Data conflicts in Spark Connect
+  - Fix: Add UUID to view names
+  - Status: Awaiting developer decision
+
+### ⚙️ Flagged for Config Testing (1 item)
+- BC-17.3-002 in streaming.py:30 - Auto Loader default changed
+  - Action: Test performance, add explicit config if needed
+  - Status: No change made (test first)
+
+### Summary
+- Files scanned: 2
+- 🔴 Auto-fixed: 1
+- 🟡 Manual review: 1
+- ⚙️ Config check: 1
+```
 
 ---
 

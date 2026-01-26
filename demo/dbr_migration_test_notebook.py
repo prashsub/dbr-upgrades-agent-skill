@@ -138,6 +138,9 @@ print("Scala 2.13 breaking patterns defined")
 # MAGIC %md
 # MAGIC ---
 # MAGIC # 🟡 MANUAL REVIEW CHANGES
+# MAGIC 
+# MAGIC **⚠️ AGENT: These items should be FLAGGED for developer review, with specific guidance on what to check.**
+# MAGIC 
 # MAGIC ---
 
 # COMMAND ----------
@@ -147,7 +150,13 @@ print("Scala 2.13 breaking patterns defined")
 
 # COMMAND ----------
 
-# BC-15.4-001: VARIANT UDF - FAILS on DBR 15.4 only, works on 16.4+
+# =============================================================================
+# BC-15.4-001: [MANUAL REVIEW] VARIANT UDF
+# FAILS on DBR 15.4 only, works on 16.4+
+# 
+# REVIEW: If target is 15.4, use StringType + json.dumps instead
+# FIX: @udf(returnType=StringType()) + return json.dumps({...})
+# =============================================================================
 @udf(returnType=VariantType())
 def create_trip_variant(fare, tip):
     return {"fare": fare, "tip": tip, "total": fare + tip if fare and tip else 0}
@@ -163,7 +172,13 @@ print("VARIANT UDF created")
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC -- BC-15.4-004: Column types in VIEW - FAILS on DBR 15.4+
+# MAGIC -- =============================================================================
+# MAGIC -- BC-15.4-004: [MANUAL REVIEW] VIEW Column Type Definition
+# MAGIC -- FAILS on DBR 15.4+ - column types/constraints not allowed in CREATE VIEW
+# MAGIC --
+# MAGIC -- REVIEW: Remove type definitions, move constraints to SELECT
+# MAGIC -- FIX: CREATE VIEW name AS SELECT CAST(...) FROM ... WHERE ... IS NOT NULL
+# MAGIC -- =============================================================================
 # MAGIC CREATE OR REPLACE VIEW taxi_view (
 # MAGIC     trip_date DATE NOT NULL,
 # MAGIC     total_trips BIGINT DEFAULT 0,
@@ -179,11 +194,19 @@ print("VARIANT UDF created")
 
 # COMMAND ----------
 
-# BC-SC-001: In Spark Connect, this error appears LATE, not immediately
+# =============================================================================
+# BC-SC-001: [MANUAL REVIEW] Lazy Schema Analysis (Spark Connect)
+# In Spark Connect, errors appear at ACTION time, not transformation time
+#
+# REVIEW: Check if try/except blocks rely on catching errors at transformation
+# FIX: Add _ = df.columns after transformation to force early validation
+# =============================================================================
 def risky_transform():
     try:
         # Typo: "far_amount" instead of "fare_amount"
         result = taxi_df.withColumn("total", col("far_amount") + col("tip_amount"))
+        # FIX: Add this line to catch errors early in Spark Connect:
+        # _ = result.columns
         print("Transform created - error won't appear until action in Spark Connect")
     except Exception as e:
         print(f"Caught: {e}")
@@ -197,10 +220,16 @@ risky_transform()
 
 # COMMAND ----------
 
-# BC-SC-002: Same view name reused - causes issues in Spark Connect
+# =============================================================================
+# BC-SC-002: [MANUAL REVIEW] Temp View Name Reuse (Spark Connect)
+# Same view name used multiple times - in Spark Connect, all DFs see latest data
+#
+# REVIEW: Check if temp view names are reused in loops or repeated function calls
+# FIX: Use unique names with UUID: f"batch_{name}_{uuid.uuid4().hex[:8]}"
+# =============================================================================
 def process_data(size, name):
     df = spark.range(size).withColumn("batch", lit(name))
-    df.createOrReplaceTempView("current_batch")  # Same name every time!
+    df.createOrReplaceTempView("current_batch")  # Same name every time - PROBLEM!
     return spark.table("current_batch")
 
 batch_a = process_data(100, "morning")
@@ -216,12 +245,19 @@ print(f"Batch A: {batch_a.count()}, Batch B: {batch_b.count()}")
 
 # COMMAND ----------
 
-# BC-SC-003: External variable capture - different behavior in Spark Connect
+# =============================================================================
+# BC-SC-003: [MANUAL REVIEW] UDF Late Binding (Spark Connect)
+# External variable captured at EXECUTION time, not definition time
+#
+# REVIEW: Check if UDFs reference variables defined outside the function
+# FIX: Use function factory pattern to capture value at creation time
+#      def make_udf(val): @udf(...) def fn(x): return x * val; return fn
+# =============================================================================
 multiplier = 1.0
 
 @udf("double")
 def apply_multiplier(value):
-    return value * multiplier  # Captures external variable
+    return value * multiplier  # Captures external variable - PROBLEM!
 
 multiplier = 2.5  # Changed AFTER UDF defined
 
@@ -236,11 +272,17 @@ df_mult.select("fare_amount", "adjusted_fare").show(3)
 
 # COMMAND ----------
 
-# BC-SC-004: df.columns in loop - SLOW in Spark Connect
+# =============================================================================
+# BC-SC-004: [MANUAL REVIEW] Schema Access in Loops (Spark Connect)
+# df.columns/df.schema triggers RPC call - very slow in loops
+#
+# REVIEW: Check if df.columns, df.schema, or df.dtypes is accessed inside loops
+# FIX: Cache schema outside loop: cached_cols = df.columns; for c in cached_cols:
+# =============================================================================
 def add_columns_slow(df):
     start = time.time()
     for i in range(10):
-        if f"col_{i}" not in df.columns:  # RPC call each iteration in Connect!
+        if f"col_{i}" not in df.columns:  # RPC call each iteration - SLOW!
             df = df.withColumn(f"col_{i}", lit(i))
     print(f"Slow pattern: {time.time() - start:.2f}s")
     return df
@@ -252,6 +294,9 @@ result = add_columns_slow(taxi_df.limit(100))
 # MAGIC %md
 # MAGIC ---
 # MAGIC # ⚙️ CONFIG CHANGES
+# MAGIC 
+# MAGIC **⚠️ AGENT: These are behavioral changes. Flag them as "test first, add config if results differ."**
+# MAGIC 
 # MAGIC ---
 
 # COMMAND ----------
@@ -261,8 +306,13 @@ result = add_columns_slow(taxi_df.limit(100))
 
 # COMMAND ----------
 
-# BC-13.3-002: Parquet timestamp inference changed
-# Fix: spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")
+# =============================================================================
+# BC-13.3-002: [CONFIG FLAG] Parquet Timestamp NTZ Inference
+# Default behavior changed - timestamps may be inferred differently
+#
+# TEST: Read Parquet files and verify timestamp values are correct
+# FIX IF NEEDED: spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")
+# =============================================================================
 try:
     val = spark.conf.get("spark.sql.parquet.inferTimestampNTZ.enabled")
     print(f"BC-13.3-002: Current inferTimestampNTZ: {val}")
@@ -276,8 +326,13 @@ except:
 
 # COMMAND ----------
 
-# BC-15.4-002: JDBC timestamp handling changed
-# Fix: spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
+# =============================================================================
+# BC-15.4-002: [CONFIG FLAG] JDBC useNullCalendar
+# Default changed to true - JDBC timestamps may be handled differently
+#
+# TEST: Read from JDBC and verify timestamp values match source system
+# FIX IF NEEDED: spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
+# =============================================================================
 try:
     val = spark.conf.get("spark.sql.legacy.jdbc.useNullCalendar")
     print(f"BC-15.4-002: Current useNullCalendar: {val}")
@@ -291,7 +346,13 @@ except:
 
 # COMMAND ----------
 
-# BC-16.4-004: This setting will FAIL in DBR 16.4+
+# =============================================================================
+# BC-16.4-004: [CONFIG FLAG] MERGE materializeSource=none Disallowed
+# Setting to "none" throws error in DBR 16.4+
+#
+# SCAN: Search for merge.materializeSource.*none in codebase
+# FIX: Remove the setting OR change to "auto"
+# =============================================================================
 # spark.conf.set("spark.databricks.delta.merge.materializeSource", "none")  # ❌ ERROR!
 print("BC-16.4-004: materializeSource='none' is no longer allowed - use 'auto' instead")
 
@@ -302,7 +363,13 @@ print("BC-16.4-004: materializeSource='none' is no longer allowed - use 'auto' i
 
 # COMMAND ----------
 
-# BC-17.3-002: Default changed from "auto" to "false"
+# =============================================================================
+# BC-17.3-002: [CONFIG FLAG] Auto Loader Incremental Listing Default Changed
+# Default changed from "auto" to "false" - may be slower but more reliable
+#
+# TEST: Run Auto Loader jobs and check if performance is acceptable
+# FIX IF NEEDED: Add .option("cloudFiles.useIncrementalListing", "auto")
+# =============================================================================
 auto_loader_code = """
 # Old code (relies on implicit "auto"):
 df = spark.readStream.format("cloudFiles").option("cloudFiles.format", "parquet").load(path)
@@ -325,25 +392,27 @@ print(auto_loader_code)
 # MAGIC %md
 # MAGIC ## All Breaking Changes in This Notebook
 # MAGIC 
-# MAGIC | ID | Type | Pattern | Status |
-# MAGIC |----|------|---------|--------|
-# MAGIC | BC-17.3-001 | 🔴 Auto-Fix | `input_file_name()` | ❌ Breaks on 17.3 |
-# MAGIC | BC-15.4-003 | 🔴 Auto-Fix | `!` syntax for NOT | ❌ Breaks on 15.4+ |
-# MAGIC | BC-16.4-001a | 🔴 Auto-Fix | `JavaConverters` | ❌ Deprecated 16.4+ |
-# MAGIC | BC-16.4-001b | 🔴 Auto-Fix | `.to[List]` | ❌ Fails 16.4+ |
-# MAGIC | BC-16.4-001c | 🔴 Auto-Fix | `TraversableOnce` | ❌ Fails 16.4+ |
-# MAGIC | BC-16.4-001d | 🔴 Auto-Fix | `Traversable` | ❌ Fails 16.4+ |
-# MAGIC | BC-16.4-001e | 🔴 Auto-Fix | `Stream.from()` | ❌ Deprecated 16.4+ |
-# MAGIC | BC-15.4-001 | 🟡 Manual | `VariantType()` UDF | ⚠️ 15.4 only |
-# MAGIC | BC-15.4-004 | 🟡 Manual | VIEW column types | ❌ Breaks on 15.4+ |
-# MAGIC | BC-SC-001 | 🟡 Manual | Lazy schema | ⚠️ Spark Connect |
-# MAGIC | BC-SC-002 | 🟡 Manual | Temp view reuse | ⚠️ Spark Connect |
-# MAGIC | BC-SC-003 | 🟡 Manual | UDF late binding | ⚠️ Spark Connect |
-# MAGIC | BC-SC-004 | 🟡 Manual | Schema in loop | ⚠️ Spark Connect |
-# MAGIC | BC-13.3-002 | ⚙️ Config | Parquet timestamp | ⚠️ Behavior change |
-# MAGIC | BC-15.4-002 | ⚙️ Config | JDBC timestamp | ⚠️ Behavior change |
-# MAGIC | BC-16.4-004 | ⚙️ Config | MERGE source=none | ❌ Not allowed |
-# MAGIC | BC-17.3-002 | ⚙️ Config | Auto Loader listing | ⚠️ Behavior change |
+# MAGIC ### Expected Agent Behavior
+# MAGIC 
+# MAGIC | ID | Type | Pattern | Agent Action |
+# MAGIC |----|------|---------|--------------|
+# MAGIC | BC-17.3-001 | 🔴 Auto-Fix | `input_file_name()` | **FIX** → `_metadata.file_name` |
+# MAGIC | BC-15.4-003 | 🔴 Auto-Fix | `!` syntax for NOT | **FIX** → `NOT` keyword |
+# MAGIC | BC-16.4-001a | 🔴 Auto-Fix | `JavaConverters` | **FIX** → `CollectionConverters` |
+# MAGIC | BC-16.4-001b | 🔴 Auto-Fix | `.to[List]` | **FIX** → `.to(List)` |
+# MAGIC | BC-16.4-001c | 🔴 Auto-Fix | `TraversableOnce` | **FIX** → `IterableOnce` |
+# MAGIC | BC-16.4-001d | 🔴 Auto-Fix | `Traversable` | **FIX** → `Iterable` |
+# MAGIC | BC-16.4-001e | 🔴 Auto-Fix | `Stream.from()` | **FIX** → `LazyList.from()` |
+# MAGIC | BC-15.4-001 | 🟡 Manual | `VariantType()` UDF | **FLAG** - Skip if target ≥16.4 |
+# MAGIC | BC-15.4-004 | 🟡 Manual | VIEW column types | **FLAG** - Remove types, cast in SELECT |
+# MAGIC | BC-SC-001 | 🟡 Manual | Lazy schema analysis | **FLAG** - Add `df.columns` for validation |
+# MAGIC | BC-SC-002 | 🟡 Manual | Temp view reuse | **FLAG** - Add UUID to view names |
+# MAGIC | BC-SC-003 | 🟡 Manual | UDF late binding | **FLAG** - Use function factory pattern |
+# MAGIC | BC-SC-004 | 🟡 Manual | Schema in loop | **FLAG** - Cache columns outside loop |
+# MAGIC | BC-13.3-002 | ⚙️ Config | Parquet timestamp | **FLAG** - Test timestamps first |
+# MAGIC | BC-15.4-002 | ⚙️ Config | JDBC timestamp | **FLAG** - Test JDBC reads first |
+# MAGIC | BC-16.4-004 | ⚙️ Config | MERGE source=none | **FLAG** - Remove or use "auto" |
+# MAGIC | BC-17.3-002 | ⚙️ Config | Auto Loader listing | **FLAG** - Test performance first |
 
 # COMMAND ----------
 
