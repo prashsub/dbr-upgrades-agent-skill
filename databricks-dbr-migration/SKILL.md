@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
-  databricks-skill-version: "3.6.0"
+  databricks-skill-version: "4.0.0"
   databricks-skill-category: platform-migration
   databricks-skill-last-updated: "2026-01-26"
 allowed-tools: Read Write Bash(grep:*) Bash(find:*) Bash(python:*)
@@ -27,89 +27,61 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 
 ## CRITICAL: Add Summary as Markdown Cell
 
-**After scanning or fixing, ALWAYS add a summary as a NEW MARKDOWN CELL at the end of the notebook:**
+**After scanning, fixing, or validating, ALWAYS add a summary as a NEW MARKDOWN CELL at the end of the notebook.**
 
-### For SCAN Results - Add This Markdown Cell:
+### How to Add Summaries
 
-````markdown
-# MAGIC %md
-# MAGIC ## 📋 DBR Migration Scan Results
-# MAGIC 
-# MAGIC **Scan Date:** YYYY-MM-DD HH:MM  
-# MAGIC **Target DBR Version:** 17.3
-# MAGIC 
-# MAGIC ### Summary
-# MAGIC | Category | Count |
-# MAGIC |----------|-------|
-# MAGIC | 🔴 Auto-Fix | X |
-# MAGIC | 🟡 Manual Review | Y |
-# MAGIC | ⚙️ Config Check | Z |
-# MAGIC 
-# MAGIC ### 🔴 Auto-Fix Required
-# MAGIC | Line | BC-ID | Pattern | Fix |
-# MAGIC |------|-------|---------|-----|
-# MAGIC | 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |
-# MAGIC 
-# MAGIC ### 🟡 Manual Review Required
-# MAGIC | Line | BC-ID | Issue | Action |
-# MAGIC |------|-------|-------|--------|
-# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | Add UUID to view names |
-# MAGIC 
-# MAGIC ### ⚙️ Config Check (Test First)
-# MAGIC | Line | BC-ID | Issue | Config If Needed |
-# MAGIC |------|-------|-------|------------------|
-# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
-# MAGIC 
-# MAGIC ### Next Steps
-# MAGIC 1. Run: `@databricks-dbr-migration fix all auto-fixable issues`
-# MAGIC 2. Review manual items above
-# MAGIC 3. Test config changes on DBR 17.3
-````
+1. **Load the appropriate template** from `assets/markdown-templates/`
+2. **Replace all template variables** with actual findings (counts, line numbers, BC-IDs)
+3. **Add as a new cell** at the end of the notebook
 
-### For FIX Results - Add This Markdown Cell:
+### Available Templates
 
-````markdown
-# MAGIC %md
-# MAGIC ## ✅ DBR Migration Fix Results
-# MAGIC 
-# MAGIC **Fix Date:** YYYY-MM-DD HH:MM  
-# MAGIC **Target DBR Version:** 17.3
-# MAGIC 
-# MAGIC ### Summary
-# MAGIC | Status | Count |
-# MAGIC |--------|-------|
-# MAGIC | ✅ Fixed | X |
-# MAGIC | 🟡 Manual Review Still Required | Y |
-# MAGIC | ⚙️ Config Check Still Required | Z |
-# MAGIC 
-# MAGIC ### ✅ Auto-Fixes Applied
-# MAGIC | Line | BC-ID | Pattern | Applied Fix |
-# MAGIC |------|-------|---------|-------------|
-# MAGIC | 42 | BC-17.3-001 | `input_file_name()` | Replaced with `_metadata.file_name` |
-# MAGIC | 89 | BC-15.4-003 | `IF !condition` | Replaced with `IF NOT condition` |
-# MAGIC 
-# MAGIC ### 🟡 Manual Review Still Required
-# MAGIC | Line | BC-ID | Issue | Action |
-# MAGIC |------|-------|-------|--------|
-# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | Add UUID to view names |
-# MAGIC 
-# MAGIC ### ⚙️ Config Check Still Required
-# MAGIC | Line | BC-ID | Issue | Config If Needed |
-# MAGIC |------|-------|-------|------------------|
-# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
-# MAGIC 
-# MAGIC ### Next Steps
-# MAGIC 1. Review manual items above
-# MAGIC 2. Test on DBR 17.3 cluster
-# MAGIC 3. Validate config changes as needed
-# MAGIC 4. Run: `@databricks-dbr-migration validate all fixes were applied correctly`
-````
+| Action | Template File | When to Use |
+|--------|---------------|-------------|
+| **SCAN** | `assets/markdown-templates/scan-summary.md` | After scanning code for breaking changes |
+| **FIX** | `assets/markdown-templates/fix-summary.md` | After applying automatic fixes |
+| **VALIDATE** | `assets/markdown-templates/validation-report.md` | After validating fixes were applied correctly |
 
-### Example Agent Actions
+### Template Variables
 
-**After scanning:** Add a new cell at the end of the notebook with the scan summary.
+**All templates use variables like:**
+- `{SCAN_DATE}` / `{FIX_DATE}` / `{VALIDATION_DATE}` → Current date/time (YYYY-MM-DD HH:MM)
+- `{TARGET_VERSION}` → Target DBR version (e.g., "17.3")
+- `{AUTO_FIX_COUNT}` → Number of auto-fixable issues
+- `{MANUAL_REVIEW_COUNT}` → Number of manual review items
+- `{CONFIG_CHECK_COUNT}` → Number of config check items
+- `{AUTO_FIX_ITEMS}` / `{APPLIED_FIXES}` → Table rows with findings/fixes
+- `{MANUAL_REVIEW_ITEMS}` → Table rows for manual review items
+- `{CONFIG_CHECK_ITEMS}` → Table rows for config items
 
-**After fixing:** Add a new cell at the end of the notebook with the fix summary showing what was auto-fixed and what still needs manual attention.
+**Example table row format:**
+```
+| 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |
+```
+
+### Example Agent Action (SCAN)
+
+```python
+# 1. Read template
+with open('assets/markdown-templates/scan-summary.md', 'r') as f:
+    template = f.read()
+
+# 2. Replace variables with actual data
+summary = template.replace('{SCAN_DATE}', '2026-01-26 14:30')
+summary = summary.replace('{TARGET_VERSION}', '17.3')
+summary = summary.replace('{AUTO_FIX_COUNT}', '5')
+summary = summary.replace('{MANUAL_REVIEW_COUNT}', '2')
+summary = summary.replace('{CONFIG_CHECK_COUNT}', '1')
+summary = summary.replace('{AUTO_FIX_ITEMS}', 
+    '| 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |\n' +
+    '| 89 | BC-15.4-003 | `IF !condition` | Replace with `IF NOT condition` |')
+# ... replace other variables ...
+
+# 3. Add as new markdown cell at end of notebook
+```
+
+> 📝 **See `assets/markdown-templates/README.md` for complete template documentation.**
 
 ---
 
