@@ -4,20 +4,74 @@ This guide provides ready-to-use prompts for efficiently running the DBR LTS Mig
 
 ---
 
+## ⚠️ Prerequisites: Skill Installation
+
+**IMPORTANT:** Before using any prompts in this guide, ensure the skill is properly installed.
+
+### Required Installation Location
+
+The skill **MUST** be installed in:
+```
+/Users/{your-username}/.assistant/skills/databricks-dbr-migration/
+```
+
+### Verify Skill Installation
+
+**Step 1: Check if the skill folder exists**
+```bash
+ls -la ~/.assistant/skills/databricks-dbr-migration/
+```
+
+**Expected output:** You should see:
+- `SKILL.md` (main skill file)
+- `assets/` folder
+- `references/` folder  
+- `scripts/` folder
+
+**Step 2: Verify the skill is recognized**
+
+In Databricks Assistant, type:
+```
+What skills do you have access to?
+```
+
+**Expected response:** The assistant should list `databricks-dbr-migration` among available skills.
+
+### If Skill Is Not Installed
+
+1. **Copy the skill folder:**
+   ```bash
+   cp -r databricks-dbr-migration ~/.assistant/skills/
+   ```
+
+2. **Verify permissions:**
+   ```bash
+   chmod -R 755 ~/.assistant/skills/databricks-dbr-migration/
+   ```
+
+3. **Restart Databricks Assistant** (if necessary)
+
+> 💡 **Tip:** See [01-skill-setup.md](./01-skill-setup.md) for detailed installation instructions.
+
+---
+
 ## 📋 Table of Contents
 
-1. [Quick Start Prompts](#quick-start-prompts)
-2. [Scanning Prompts](#scanning-prompts)
-3. [Fixing Prompts](#fixing-prompts)
-4. [Validation Prompts](#validation-prompts)
-5. [Multi-File Project Prompts](#multi-file-project-prompts)
-6. [Specific Breaking Change Prompts](#specific-breaking-change-prompts)
-7. [Configuration Prompts](#configuration-prompts)
-8. [Troubleshooting Prompts](#troubleshooting-prompts)
+1. [Prerequisites: Skill Installation](#️-prerequisites-skill-installation) ⬅️ **Start here!**
+2. [Quick Start Prompts](#quick-start-prompts)
+3. [Scanning Prompts](#scanning-prompts)
+4. [Fixing Prompts](#fixing-prompts)
+5. [Validation Prompts](#validation-prompts)
+6. [Multi-File Project Prompts](#multi-file-project-prompts)
+7. [Specific Breaking Change Prompts](#specific-breaking-change-prompts)
+8. [Configuration Prompts](#configuration-prompts)
+9. [Troubleshooting Prompts](#troubleshooting-prompts)
 
 ---
 
 ## Quick Start Prompts
+
+> ⚠️ **Before proceeding:** Ensure you've completed the [Prerequisites](#️-prerequisites-skill-installation) section above!
 
 ### 🔍 Initial Assessment
 
@@ -474,12 +528,36 @@ Focus on [input_file_name / Spark Connect / Scala 2.13] issues:
 
 ## Integration with Databricks Assistant
 
+### Verify Skill is Loaded (First Time Setup)
+
+**Before using any prompts, verify the skill is accessible:**
+
+```
+What agent skills are currently available?
+```
+
+**Expected:** You should see `databricks-dbr-migration` in the list.
+
+**If not listed:**
+1. Check installation: `ls ~/.assistant/skills/databricks-dbr-migration/`
+2. Verify SKILL.md exists: `cat ~/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5`
+3. Restart Databricks Assistant
+
 ### Using @-mentions
 
 Always prefix your prompt with the skill name:
 ```
 @databricks-dbr-migration [your prompt here]
 ```
+
+> ⚠️ **Important:** The skill name is `databricks-dbr-migration` (with hyphens), not `dbr-migration`
+
+**Test the @-mention:**
+```
+@databricks-dbr-migration hello, are you working?
+```
+
+**Expected response:** The agent should acknowledge and describe its capabilities.
 
 ### In Databricks Notebooks
 
@@ -525,6 +603,45 @@ Typical response times:
 ---
 
 ## Troubleshooting Common Issues
+
+### Issue: Skill not found or @-mention doesn't work
+
+**Symptoms:**
+- Agent responds "I don't have access to that skill"
+- @databricks-dbr-migration doesn't autocomplete
+- Agent says "I can't find databricks-dbr-migration"
+
+**Solution 1: Verify Installation**
+```bash
+# Check if skill folder exists
+ls -la ~/.assistant/skills/databricks-dbr-migration/
+
+# Verify SKILL.md exists
+cat ~/.assistant/skills/databricks-dbr-migration/SKILL.md | head -5
+```
+
+**Solution 2: Reinstall the Skill**
+```bash
+# From repository root
+cp -r databricks-dbr-migration ~/.assistant/skills/
+chmod -R 755 ~/.assistant/skills/databricks-dbr-migration/
+```
+
+**Solution 3: Check Path**
+The skill MUST be in: `/Users/{username}/.assistant/skills/databricks-dbr-migration/`
+
+Not in: `~/.databricks/skills/` ❌  
+Not in: `~/skills/` ❌  
+Not in: `/opt/skills/` ❌
+
+**Solution 4: Ask Assistant to List Skills**
+```
+What skills are available? Please list all installed agent skills.
+```
+
+If `databricks-dbr-migration` is not listed, reinstall using Solution 2.
+
+---
 
 ### Issue: Agent doesn't find obvious breaking changes
 
