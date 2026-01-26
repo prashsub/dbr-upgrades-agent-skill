@@ -66,8 +66,50 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 # MAGIC 3. Test config changes on DBR 17.3
 ````
 
-### Example Agent Action
-After scanning, add a new cell at the end of the notebook with the scan summary.
+### For FIX Results - Add This Markdown Cell:
+
+````markdown
+# MAGIC %md
+# MAGIC ## ✅ DBR Migration Fix Results
+# MAGIC 
+# MAGIC **Fix Date:** YYYY-MM-DD HH:MM  
+# MAGIC **Target DBR Version:** 17.3
+# MAGIC 
+# MAGIC ### Summary
+# MAGIC | Status | Count |
+# MAGIC |--------|-------|
+# MAGIC | ✅ Fixed | X |
+# MAGIC | 🟡 Manual Review Still Required | Y |
+# MAGIC | ⚙️ Config Check Still Required | Z |
+# MAGIC 
+# MAGIC ### ✅ Auto-Fixes Applied
+# MAGIC | Line | BC-ID | Pattern | Applied Fix |
+# MAGIC |------|-------|---------|-------------|
+# MAGIC | 42 | BC-17.3-001 | `input_file_name()` | Replaced with `_metadata.file_name` |
+# MAGIC | 89 | BC-15.4-003 | `IF !condition` | Replaced with `IF NOT condition` |
+# MAGIC 
+# MAGIC ### 🟡 Manual Review Still Required
+# MAGIC | Line | BC-ID | Issue | Action |
+# MAGIC |------|-------|-------|--------|
+# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | Add UUID to view names |
+# MAGIC 
+# MAGIC ### ⚙️ Config Check Still Required
+# MAGIC | Line | BC-ID | Issue | Config If Needed |
+# MAGIC |------|-------|-------|------------------|
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC 
+# MAGIC ### Next Steps
+# MAGIC 1. Review manual items above
+# MAGIC 2. Test on DBR 17.3 cluster
+# MAGIC 3. Validate config changes as needed
+# MAGIC 4. Run: `@databricks-dbr-migration validate all fixes were applied correctly`
+````
+
+### Example Agent Actions
+
+**After scanning:** Add a new cell at the end of the notebook with the scan summary.
+
+**After fixing:** Add a new cell at the end of the notebook with the fix summary showing what was auto-fixed and what still needs manual attention.
 
 ---
 
