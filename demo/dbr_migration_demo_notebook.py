@@ -848,7 +848,10 @@ print(f"Result columns: {len(result_bad.columns)}")
 # COMMAND ----------
 
 print("=== BC-13.3-002: Parquet Timestamp NTZ ===")
-print("Current setting:", spark.conf.get("spark.sql.parquet.inferTimestampNTZ.enabled", "not set"))
+try:
+    print("Current setting:", spark.conf.get("spark.sql.parquet.inferTimestampNTZ.enabled"))
+except:
+    print("Current setting: not explicitly set (using DBR default)")
 print()
 print("To restore DBR 13.3 behavior:")
 print('spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")')
@@ -884,7 +887,10 @@ print('spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")')
 # COMMAND ----------
 
 print("=== BC-15.4-002: JDBC useNullCalendar ===")
-print("Current setting:", spark.conf.get("spark.sql.legacy.jdbc.useNullCalendar", "not set"))
+try:
+    print("Current setting:", spark.conf.get("spark.sql.legacy.jdbc.useNullCalendar"))
+except:
+    print("Current setting: not explicitly set (using DBR default)")
 print()
 print("To restore previous behavior:")
 print('spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")')
