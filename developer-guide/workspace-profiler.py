@@ -996,23 +996,28 @@ if CONFIG["export_csv"]:
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC -- View latest scan results
-# MAGIC SELECT 
-# MAGIC   severity,
-# MAGIC   breaking_change_id,
-# MAGIC   breaking_change_name,
-# MAGIC   notebook_path,
-# MAGIC   notebook_link,
-# MAGIC   job_name,
-# MAGIC   line_number,
-# MAGIC   remediation
-# MAGIC FROM ${output_catalog}.${output_schema}.${output_table}
-# MAGIC WHERE scan_id = (SELECT MAX(scan_id) FROM ${output_catalog}.${output_schema}.${output_table})
-# MAGIC ORDER BY 
-# MAGIC   CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
-# MAGIC   breaking_change_id,
-# MAGIC   notebook_path
+# View latest scan results using CONFIG values
+output_table = f"{CONFIG['output_catalog']}.{CONFIG['output_schema']}.{CONFIG['output_table']}"
+
+latest_results_df = spark.sql(f"""
+SELECT 
+  severity,
+  breaking_change_id,
+  breaking_change_name,
+  notebook_path,
+  notebook_link,
+  job_name,
+  line_number,
+  remediation
+FROM {output_table}
+WHERE scan_id = (SELECT MAX(scan_id) FROM {output_table})
+ORDER BY 
+  CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
+  breaking_change_id,
+  notebook_path
+""")
+
+display(latest_results_df)
 
 # COMMAND ----------
 
@@ -1023,26 +1028,56 @@ if CONFIG["export_csv"]:
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC -- Dashboard Query: Breaking Changes Summary
-# MAGIC WITH latest_scan AS (
-# MAGIC   SELECT MAX(scan_id) as scan_id 
-# MAGIC   FROM ${output_catalog}.${output_schema}.${output_table}
-# MAGIC )
-# MAGIC SELECT 
-# MAGIC   severity,
-# MAGIC   breaking_change_id,
-# MAGIC   breaking_change_name,
-# MAGIC   COUNT(*) as occurrence_count,
-# MAGIC   COUNT(DISTINCT notebook_path) as affected_notebooks,
-# MAGIC   COUNT(DISTINCT job_id) as affected_jobs,
-# MAGIC   FIRST(remediation) as remediation
-# MAGIC FROM ${output_catalog}.${output_schema}.${output_table}
-# MAGIC WHERE scan_id = (SELECT scan_id FROM latest_scan)
-# MAGIC GROUP BY severity, breaking_change_id, breaking_change_name
-# MAGIC ORDER BY 
-# MAGIC   CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
-# MAGIC   occurrence_count DESC
+# Dashboard Query: Breaking Changes Summary using CONFIG values
+output_table = f"{CONFIG['output_catalog']}.{CONFIG['output_schema']}.{CONFIG['output_table']}"
+
+summary_df = spark.sql(f"""
+WITH latest_scan AS (
+  SELECT MAX(scan_id) as scan_id 
+  FROM {output_table}
+)
+SELECT 
+  severity,
+  breaking_change_id,
+  breaking_change_name,
+  COUNT(*) as occurrence_count,
+  COUNT(DISTINCT notebook_path) as affected_notebooks,
+  COUNT(DISTINCT job_id) as affected_jobs,
+  FIRST(remediation) as remediation
+FROM {output_table}
+WHERE scan_id = (SELECT scan_id FROM latest_scan)
+GROUP BY severity, breaking_change_id, breaking_change_name
+ORDER BY 
+  CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
+  occurrence_count DESC
+""")
+
+display(summary_df)
+
+# Print the raw SQL for use in Databricks SQL Dashboard
+print("=" * 60)
+print("SQL for Databricks SQL Dashboard (copy/paste):")
+print("=" * 60)
+print(f"""
+WITH latest_scan AS (
+  SELECT MAX(scan_id) as scan_id 
+  FROM {output_table}
+)
+SELECT 
+  severity,
+  breaking_change_id,
+  breaking_change_name,
+  COUNT(*) as occurrence_count,
+  COUNT(DISTINCT notebook_path) as affected_notebooks,
+  COUNT(DISTINCT job_id) as affected_jobs,
+  FIRST(remediation) as remediation
+FROM {output_table}
+WHERE scan_id = (SELECT scan_id FROM latest_scan)
+GROUP BY severity, breaking_change_id, breaking_change_name
+ORDER BY 
+  CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
+  occurrence_count DESC
+""")
 
 # COMMAND ----------
 
@@ -1141,10 +1176,16 @@ def generate_html_report(df) -> str:
 # Generate and save HTML report
 if all_results:
     html_report = generate_html_report(results_df)
-    html_path = CONFIG["csv_path"].replace(".csv", ".html") if CONFIG["export_csv"] else "/tmp/scan_report.html"
     
-    # Save to DBFS
-    dbutils.fs.put(html_path.replace("/Volumes/", "dbfs:/Volumes/"), html_report, overwrite=True)
+    # Use CONFIG csv_path to derive HTML path
+    if CONFIG.get("export_csv") and CONFIG.get("csv_path"):
+        html_path = CONFIG["csv_path"].replace(".csv", ".html")
+    else:
+        # Default path using CONFIG catalog/schema
+        html_path = f"/Volumes/{CONFIG['output_catalog']}/{CONFIG['output_schema']}/exports/scan_report.html"
+    
+    # Save to Unity Catalog Volume (no path conversion needed for /Volumes/ paths)
+    dbutils.fs.put(html_path, html_report, overwrite=True)
     print(f"✅ HTML report saved to: {html_path}")
 
 # COMMAND ----------
