@@ -2,10 +2,10 @@
 
 **Scope reviewed:** Agent skill spec, reference docs, scripts, and developer guide.  
 **Files inspected:**  
-- `databricks-lts-migration/SKILL.md`  
-- `databricks-lts-migration/references/*.md`  
-- `databricks-lts-migration/scripts/*.py`  
-- `databricks-lts-migration/assets/fix-patterns.json`  
+- `databricks-dbr-migration/SKILL.md`  
+- `databricks-dbr-migration/references/*.md`  
+- `databricks-dbr-migration/scripts/*.py`  
+- `databricks-dbr-migration/assets/fix-patterns.json`  
 - `developer-guide/README.md`  
 - `databricks_lts_breaking_changes.md`  
 - `VALIDATION-REPORT.md`
@@ -16,7 +16,7 @@
 
 ### 1) ~~High: Python SQL-string handling still misses common cases~~ ✅ FIXED
 SQL-string replacement only targets triple-double-quoted strings and double-quoted `spark.sql/expr/selectExpr`. It **does not** handle single-quoted strings, f-strings, or triple-single-quoted SQL.  
-**Location:** `databricks-lts-migration/scripts/apply-fixes.py`
+**Location:** `databricks-dbr-migration/scripts/apply-fixes.py`
 
 **FIX APPLIED:**
 - Completely rewrote string handling to process ALL string types first:
@@ -39,7 +39,7 @@ DataFrame API: PASS (sql=0, api=1)
 
 ### 2) ~~High: Multiline SQL strings can still be modified by the line-based pass~~ ✅ FIXED
 The line-by-line replacement uses quote counting only on a single line and only skips lines that start with triple quotes.  
-**Location:** `databricks-lts-migration/scripts/apply-fixes.py`
+**Location:** `databricks-dbr-migration/scripts/apply-fixes.py`
 
 **FIX APPLIED:**
 - Removed the line-by-line pass entirely
@@ -48,7 +48,7 @@ The line-by-line replacement uses quote counting only on a single line and only 
 
 ### 3) ~~Medium: Scala `col` import is not added when no imports exist~~ ✅ FIXED
 The Scala fix adds `col` after the last import. If a file has no imports, `col` is never added.  
-**Location:** `databricks-lts-migration/scripts/apply-fixes.py`
+**Location:** `databricks-dbr-migration/scripts/apply-fixes.py`
 
 **FIX APPLIED:**
 - Added handling for files with no imports:

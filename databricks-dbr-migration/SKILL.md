@@ -1,11 +1,11 @@
 ---
-name: databricks-lts-migration
+name: databricks-dbr-migration
 description: Find, fix, and validate breaking changes when upgrading Databricks Runtime between LTS versions (13.3 to 17.3). Use this skill when users ask to scan code for DBR compatibility issues, automatically fix breaking changes, validate migrations, or upgrade Databricks workflows. Covers Spark 3.4 to 4.0, Scala 2.12 to 2.13, Delta Lake, Auto Loader, Python UDFs, and SQL syntax.
 license: Apache-2.0
 compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
-  databricks-skill-version: "3.1.0"
+  databricks-skill-version: "3.2.0"
   databricks-skill-category: platform-migration
   databricks-skill-last-updated: "2026-01-26"
 allowed-tools: Read Write Bash(grep:*) Bash(find:*) Bash(python:*)

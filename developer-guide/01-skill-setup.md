@@ -6,7 +6,7 @@ This guide walks you through installing the Databricks LTS Migration skill in yo
 
 - [ ] Databricks workspace access
 - [ ] Agent mode enabled in Databricks Assistant
-- [ ] Access to the `databricks-lts-migration` skill folder
+- [ ] Access to the `databricks-dbr-migration` skill folder
 
 ---
 
@@ -34,13 +34,13 @@ Skills live in your user workspace at:
 
 ## Step 1.2: Copy the Migration Skill
 
-Copy the entire `databricks-lts-migration` folder to your skills directory.
+Copy the entire `databricks-dbr-migration` folder to your skills directory.
 
 ### Final Structure
 
 ```
 /Users/{your-username}/.assistant/skills/
-└── databricks-lts-migration/
+└── databricks-dbr-migration/
     ├── SKILL.md                              # Main skill definition
     ├── references/
     │   ├── BREAKING-CHANGES.md               # Complete breaking changes
@@ -67,7 +67,7 @@ Copy the entire `databricks-lts-migration` folder to your skills directory.
 2. Open **Databricks Assistant** (agent mode)
 3. Ask: `What skills do you have for DBR migration?`
 
-**Expected Response:** The Assistant should mention the `databricks-lts-migration` skill.
+**Expected Response:** The Assistant should mention the `databricks-dbr-migration` skill.
 
 ### Test 2: Test Skill Activation
 

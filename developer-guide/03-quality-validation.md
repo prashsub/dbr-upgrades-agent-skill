@@ -21,7 +21,7 @@ Run the validation script to ensure no breaking patterns remain:
 %pip install -q pathlib
 
 # Run the validation script from the skill
-exec(open("/Workspace/Users/{username}/.assistant/skills/databricks-lts-migration/scripts/validate-migration.py").read())
+exec(open("/Workspace/Users/{username}/.assistant/skills/databricks-dbr-migration/scripts/validate-migration.py").read())
 
 # Or ask the Assistant:
 # "Validate that all breaking changes are fixed in /Workspace/my-project/"

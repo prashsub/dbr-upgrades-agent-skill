@@ -1283,8 +1283,8 @@ print("Cleanup complete!")
 # MAGIC | Resource | Description |
 # MAGIC |----------|-------------|
 # MAGIC | [BREAKING-CHANGES-EXPLAINED.md](../developer-guide/BREAKING-CHANGES-EXPLAINED.md) | Detailed guide with decision matrices |
-# MAGIC | [SKILL.md](../databricks-lts-migration/SKILL.md) | Agent Skill specification |
-# MAGIC | [QUICK-REFERENCE.md](../databricks-lts-migration/references/QUICK-REFERENCE.md) | ❌/🔍/✅ format reference |
+# MAGIC | [SKILL.md](../databricks-dbr-migration/SKILL.md) | Agent Skill specification |
+# MAGIC | [QUICK-REFERENCE.md](../databricks-dbr-migration/references/QUICK-REFERENCE.md) | ❌/🔍/✅ format reference |
 # MAGIC | [Databricks Release Notes](https://docs.databricks.com/release-notes/runtime/supported.html) | Official documentation |
 # MAGIC 
 # MAGIC ---

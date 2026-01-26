@@ -45,7 +45,7 @@ This agent skill helps you automatically detect and fix breaking changes when up
 
 ```
 .
-├── databricks-lts-migration/     # Agent skill definition
+├── databricks-dbr-migration/     # Agent skill definition
 │   ├── SKILL.md                  # Main skill configuration
 │   ├── assets/
 │   │   ├── fix-patterns.json     # Automated fix patterns
@@ -95,15 +95,15 @@ This agent skill helps you automatically detect and fix breaking changes when up
 In any Databricks notebook:
 
 ```
-@dbr-migration scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
+@databricks-dbr-migration scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
 ```
 
 ```
-@dbr-migration fix all breaking changes in this notebook
+@databricks-dbr-migration fix all breaking changes in this notebook
 ```
 
 ```
-@dbr-migration validate that all breaking changes have been fixed
+@databricks-dbr-migration validate that all breaking changes have been fixed
 ```
 
 > 💡 **Pro Tip:** See [Effective Prompts Guide](developer-guide/09-effective-prompts-guide.md) for 50+ ready-to-use prompts!
@@ -115,7 +115,7 @@ In any Databricks notebook:
 Use the Python script to scan your code:
 
 ```bash
-python databricks-lts-migration/scripts/scan-breaking-changes.py \
+python databricks-dbr-migration/scripts/scan-breaking-changes.py \
   --path /path/to/your/code \
   --output scan-results.json
 ```
@@ -130,7 +130,7 @@ Or use the workspace profiler to scan all jobs and notebooks:
 ### 2️⃣ **Apply Automated Fixes**
 
 ```bash
-python databricks-lts-migration/scripts/apply-fixes.py \
+python databricks-dbr-migration/scripts/apply-fixes.py \
   --input scan-results.json \
   --backup-dir ./backups
 ```
@@ -138,7 +138,7 @@ python databricks-lts-migration/scripts/apply-fixes.py \
 ### 3️⃣ **Validate Changes**
 
 ```bash
-python databricks-lts-migration/scripts/validate-migration.py \
+python databricks-dbr-migration/scripts/validate-migration.py \
   --path /path/to/fixed/code \
   --report validation-report.html
 ```
@@ -171,11 +171,11 @@ python databricks-lts-migration/scripts/validate-migration.py \
 
 | Document | Description |
 |----------|-------------|
-| [Breaking Changes Reference](databricks-lts-migration/references/BREAKING-CHANGES.md) | Complete list of all breaking changes |
-| [Migration Checklist](databricks-lts-migration/references/MIGRATION-CHECKLIST.md) | Step-by-step migration checklist |
-| [Quick Reference](databricks-lts-migration/references/QUICK-REFERENCE.md) | Quick lookup for common issues |
-| [Scala 2.13 Guide](databricks-lts-migration/references/SCALA-213-GUIDE.md) | Scala 2.12 → 2.13 migration |
-| [Spark Connect Guide](databricks-lts-migration/references/SPARK-CONNECT-GUIDE.md) | Spark Connect compatibility |
+| [Breaking Changes Reference](databricks-dbr-migration/references/BREAKING-CHANGES.md) | Complete list of all breaking changes |
+| [Migration Checklist](databricks-dbr-migration/references/MIGRATION-CHECKLIST.md) | Step-by-step migration checklist |
+| [Quick Reference](databricks-dbr-migration/references/QUICK-REFERENCE.md) | Quick lookup for common issues |
+| [Scala 2.13 Guide](databricks-dbr-migration/references/SCALA-213-GUIDE.md) | Scala 2.12 → 2.13 migration |
+| [Spark Connect Guide](databricks-dbr-migration/references/SPARK-CONNECT-GUIDE.md) | Spark Connect compatibility |
 
 ---
 
@@ -202,21 +202,21 @@ python databricks-lts-migration/scripts/validate-migration.py \
 
 ```python
 # In Databricks Assistant
-@dbr-migration scan this notebook for breaking changes from DBR 13.3 to 17.3
+@databricks-dbr-migration scan this notebook for breaking changes from DBR 13.3 to 17.3
 ```
 
 ### Fix Specific Issues
 
 ```python
 # In Databricks Assistant
-@dbr-migration fix the MERGE INTO syntax issues in this notebook
+@databricks-dbr-migration fix the MERGE INTO syntax issues in this notebook
 ```
 
 ### Generate Migration Report
 
 ```python
 # In Databricks Assistant
-@dbr-migration generate a complete migration report for my workspace
+@databricks-dbr-migration generate a complete migration report for my workspace
 ```
 
 ---
@@ -241,8 +241,8 @@ Contributions are welcome! Please:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/new-pattern`)
-3. Add your breaking change pattern to `databricks-lts-migration/assets/fix-patterns.json`
-4. Update documentation in `databricks-lts-migration/references/`
+3. Add your breaking change pattern to `databricks-dbr-migration/assets/fix-patterns.json`
+4. Update documentation in `databricks-dbr-migration/references/`
 5. Submit a pull request
 
 ---
