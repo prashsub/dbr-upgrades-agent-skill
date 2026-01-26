@@ -90,7 +90,27 @@ This agent skill helps you automatically detect and fix breaking changes when up
 
 ## 🚀 Quick Start
 
-### 1️⃣ **Scan for Breaking Changes**
+### Using Databricks Assistant (Recommended)
+
+In any Databricks notebook:
+
+```
+@dbr-migration scan this notebook for breaking changes when upgrading from DBR 13.3 to DBR 17.3
+```
+
+```
+@dbr-migration fix all breaking changes in this notebook
+```
+
+```
+@dbr-migration validate that all breaking changes have been fixed
+```
+
+> 💡 **Pro Tip:** See [Effective Prompts Guide](developer-guide/09-effective-prompts-guide.md) for 50+ ready-to-use prompts!
+
+### Using Python Scripts
+
+**1️⃣ Scan for Breaking Changes**
 
 Use the Python script to scan your code:
 
@@ -142,6 +162,7 @@ python databricks-lts-migration/scripts/validate-migration.py \
 |----------|-------------|
 | [Skill Setup](developer-guide/01-skill-setup.md) | Install the DBR migration skill |
 | [Using Assistant](developer-guide/02-using-assistant.md) | Use Databricks Assistant to scan & fix |
+| **[Effective Prompts Guide](developer-guide/09-effective-prompts-guide.md)** | 🎯 **Ready-to-use prompts** for running the agent |
 | [Quality Validation](developer-guide/03-quality-validation.md) | Validate code quality after migration |
 | [Performance Testing](developer-guide/04-performance-testing.md) | Test for performance regressions |
 | [Rollout Checklist](developer-guide/05-rollout-checklist.md) | Complete production rollout checklist |

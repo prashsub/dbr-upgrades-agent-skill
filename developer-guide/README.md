@@ -25,6 +25,7 @@ This guide provides step-by-step instructions for developers to upgrade Databric
 |----------|-------------|
 | [01-skill-setup.md](01-skill-setup.md) | Install the DBR migration skill in your workspace |
 | [02-using-assistant.md](02-using-assistant.md) | Use Databricks Assistant to scan and fix breaking changes |
+| **[09-effective-prompts-guide.md](09-effective-prompts-guide.md)** | 🎯 **Ready-to-use prompts** for efficiently running the agent skill |
 | [03-quality-validation.md](03-quality-validation.md) | Validate code quality and correctness after migration |
 | [04-performance-testing.md](04-performance-testing.md) | Test for performance regressions |
 | [05-rollout-checklist.md](05-rollout-checklist.md) | Complete checklist for production rollout |
