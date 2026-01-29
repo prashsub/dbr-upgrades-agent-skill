@@ -9,24 +9,41 @@ This guide explains each breaking change in simple terms, with examples showing:
 
 ## Table of Contents
 
-| Severity | ID | Name | DBR Version |
-|----------|-----|------|-------------|
-| 🔴 HIGH | [BC-17.3-001](#bc-173-001-input_file_name-removed) | input_file_name() Removed | 17.3 |
-| 🟢 LOW | [BC-15.4-001](#bc-154-001-variant-type-in-python-udf) | VARIANT Type in Python UDF *(15.4 only, fixed in 16.4)* | 15.4 |
-| 🔴 HIGH | [BC-16.4-001a](#bc-164-001a-scala-javaconverters) | Scala JavaConverters | 16.4 |
-| 🔴 HIGH | [BC-16.4-001c](#bc-164-001c-scala-traversableonce) | Scala TraversableOnce | 16.4 |
-| 🔴 HIGH | [BC-16.4-001d](#bc-164-001d-scala-traversable) | Scala Traversable | 16.4 |
-| 🟡 MEDIUM | [BC-15.4-003](#bc-154-003--syntax-for-not) | '!' Syntax for NOT | 15.4 |
-| 🟡 MEDIUM | [BC-16.4-001b](#bc-164-001b-scala-tocollection-syntax) | Scala .to[Collection] | 16.4 |
-| 🟡 MEDIUM | [BC-16.4-001e](#bc-164-001e-scala-stream-lazy) | Scala Stream (Lazy) | 16.4 |
-| 🟡 MEDIUM | [BC-17.3-002](#bc-173-002-auto-loader-incremental-listing) | Auto Loader Incremental Listing | 17.3 |
-| 🟡 MEDIUM | [BC-SC-002](#bc-sc-002-temp-view-name-reuse) | Temp View Name Reuse | 13.3+ |
-| 🟢 LOW | [BC-13.3-002](#bc-133-002-parquet-timestamp-ntz) | Parquet Timestamp NTZ | 13.3 |
-| 🟢 LOW | [BC-15.4-002](#bc-154-002-jdbc-usenullcalendar) | JDBC useNullCalendar | 15.4 |
-| 🟢 LOW | [BC-15.4-004](#bc-154-004-view-column-type-definition) | View Column Type Definition | 15.4 |
-| 🟢 LOW | [BC-16.4-004](#bc-164-004-merge-materializesourcenone) | MERGE materializeSource=none | 16.4 |
-| 🟢 LOW | [BC-SC-003](#bc-sc-003-udf-external-variable-capture) | UDF External Variable Capture | 14.3+ |
-| 🟢 LOW | [BC-SC-004](#bc-sc-004-schema-access-in-loops) | Schema Access in Loops | 13.3+ |
+### HIGH Severity
+| ID | Name | DBR Version |
+|-----|------|-------------|
+| [BC-17.3-001](#bc-173-001-input_file_name-removed) | input_file_name() Removed | 17.3 |
+| [BC-13.3-001](#bc-133-001-merge-into-type-casting) | MERGE INTO Type Casting (ANSI Mode) | 13.3 |
+| [BC-16.4-001a](#bc-164-001a-scala-javaconverters) | Scala JavaConverters | 16.4 |
+| [BC-16.4-001c](#bc-164-001c-scala-traversableonce) | Scala TraversableOnce | 16.4 |
+| [BC-16.4-001d](#bc-164-001d-scala-traversable) | Scala Traversable | 16.4 |
+| [BC-16.4-002](#bc-164-002-scala-hashmaphashset-ordering) | Scala HashMap/HashSet Ordering | 16.4 |
+| [BC-SC-001](#bc-sc-001-spark-connect-lazy-analysis) | Spark Connect Lazy Analysis | 13.3+ |
+
+### MEDIUM Severity
+| ID | Name | DBR Version |
+|-----|------|-------------|
+| [BC-15.4-001](#bc-154-001-variant-type-in-python-udf) | VARIANT Type in Python UDF | 15.4+ |
+| [BC-15.4-003](#bc-154-003--syntax-for-not) | '!' Syntax for NOT | 15.4 |
+| [BC-16.4-001b](#bc-164-001b-scala-tocollection-syntax) | Scala .to[Collection] | 16.4 |
+| [BC-16.4-001e](#bc-164-001e-scala-stream-lazy) | Scala Stream (Lazy) | 16.4 |
+| [BC-16.4-001f](#bc-164-001f-scala-toiterator) | Scala .toIterator | 16.4 |
+| [BC-16.4-001g](#bc-164-001g-scala-viewforce) | Scala .view.force | 16.4 |
+| [BC-16.4-001h](#bc-164-001h-scala-collectionseq) | Scala collection.Seq | 16.4 |
+| [BC-17.3-002](#bc-173-002-auto-loader-incremental-listing) | Auto Loader Incremental Listing | 17.3 |
+| [BC-13.3-003](#bc-133-003-overwriteschema-with-dynamic-partition) | overwriteSchema + Dynamic Partition | 13.3 |
+| [BC-SC-002](#bc-sc-002-temp-view-name-reuse) | Temp View Name Reuse | 13.3+ |
+
+### LOW Severity
+| ID | Name | DBR Version |
+|-----|------|-------------|
+| [BC-16.4-001i](#bc-164-001i-scala-symbol-literals) | Scala Symbol Literals | 16.4 |
+| [BC-13.3-002](#bc-133-002-parquet-timestamp-ntz) | Parquet Timestamp NTZ | 13.3 |
+| [BC-15.4-002](#bc-154-002-jdbc-usenullcalendar) | JDBC useNullCalendar | 15.4 |
+| [BC-15.4-004](#bc-154-004-view-column-type-definition) | View Column Type Definition | 15.4 |
+| [BC-16.4-004](#bc-164-004-merge-materializesourcenone) | MERGE materializeSource=none | 16.4 |
+| [BC-SC-003](#bc-sc-003-udf-external-variable-capture) | UDF External Variable Capture | 14.3+ |
+| [BC-SC-004](#bc-sc-004-schema-access-in-loops) | Schema Access in Loops | 13.3+ |
 
 ---
 
@@ -126,13 +143,105 @@ SELECT _metadata.file_name as source_file, * FROM parquet.`/data/files/`
 
 ---
 
+### BC-13.3-001: MERGE INTO Type Casting
+
+**What Changed:** In DBR 13.3+ with ANSI mode enabled, MERGE INTO operations that involve implicit type casting may throw `CAST_OVERFLOW` errors instead of silently truncating or converting values.
+
+**Why It Matters:** MERGE operations that previously succeeded may now fail if there are type mismatches between source and target columns.
+
+#### ❌ The Problem
+
+```sql
+-- If source.amount is BIGINT and target.amount is INT,
+-- values > 2147483647 will throw CAST_OVERFLOW in ANSI mode
+MERGE INTO target
+USING source
+ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET target.amount = source.amount
+```
+
+#### 🔍 How It's Detected
+
+```regex
+\bMERGE\s+INTO\b
+```
+
+This flags all MERGE statements for review of type compatibility.
+
+#### ✅ The Fix
+
+Add explicit bounds checking or type casting:
+
+**BEFORE:**
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET target.amount = source.amount
+```
+
+**AFTER:**
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED AND source.amount BETWEEN -2147483648 AND 2147483647
+THEN UPDATE SET target.amount = CAST(source.amount AS INT)
+```
+
+---
+
+### BC-SC-001: Spark Connect Lazy Analysis
+
+**What Changed:** In Spark Connect mode, schema analysis is deferred until action execution. Exceptions like `AnalysisException` won't be thrown until you call an action (e.g., `.show()`, `.collect()`).
+
+**Why It Matters:** Try/except blocks around transformations won't catch schema errors. Error handling that worked in classic Spark may not work in Spark Connect.
+
+#### ❌ The Problem
+
+```python
+try:
+    # In classic Spark, this throws immediately if column doesn't exist
+    df = spark.table("my_table").select("nonexistent_column")
+except AnalysisException:
+    df = spark.table("my_table").select("default_column")
+# In Spark Connect, the exception is NOT caught here!
+```
+
+#### 🔍 How It's Detected
+
+```regex
+except\s+.*(?:AnalysisException|SparkException|IllegalArgumentException)
+```
+
+This flags exception handling around Spark operations for review.
+
+#### ✅ The Fix
+
+Trigger eager analysis with `.schema` or `.columns` if you need to catch errors:
+
+**BEFORE:**
+```python
+try:
+    df = spark.table("my_table").select("maybe_column")
+except AnalysisException:
+    df = spark.table("my_table").select("default_column")
+```
+
+**AFTER:**
+```python
+df = spark.table("my_table")
+if "maybe_column" in df.columns:  # Triggers analysis
+    result = df.select("maybe_column")
+else:
+    result = df.select("default_column")
+```
+
+---
+
 ### BC-15.4-001: VARIANT Type in Python UDF
 
-**What Changed:** The `VARIANT` data type cannot be used as input or output for Python UDFs, UDAFs, or UDTFs **in DBR 15.4 only**.
+**What Changed:** The `VARIANT` data type may cause exceptions when used as input or output for Python UDFs, UDAFs, or UDTFs in DBR 15.4+.
 
-> ✅ **RESOLVED in DBR 16.4:** VARIANT type is now fully supported in Python UDFs! See [official documentation](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf).
+> ⚠️ **REVIEW REQUIRED:** VARIANT UDF behavior may vary by DBR version. Test on your target DBR version, or use the safer StringType + JSON approach shown below.
 
-**Why It Matters:** Attempting to use `VariantType()` in a UDF will throw a runtime error **on DBR 15.4 only**. If you're upgrading directly to 16.4 or 17.3, no action needed.
+**Why It Matters:** Using `VariantType()` in a UDF may throw runtime errors depending on DBR version. For cross-version compatibility, consider using StringType with JSON serialization.
 
 #### ❌ The Problem
 
@@ -140,7 +249,7 @@ SELECT _metadata.file_name as source_file, * FROM parquet.`/data/files/`
 from pyspark.sql.functions import udf
 from pyspark.sql.types import VariantType
 
-# This will fail in DBR 15.4 only (works in 16.4+)
+# May fail or behave unexpectedly - test on target DBR version
 @udf(returnType=VariantType())
 def create_metadata(value):
     return {"key": value, "timestamp": "2024-01-01"}
@@ -435,11 +544,184 @@ val evens = LazyList.continually(scala.util.Random.nextInt())
 
 ---
 
+### BC-16.4-001f: Scala .toIterator
+
+**What Changed:** In Scala 2.13, `.toIterator` is deprecated in favor of `.iterator`.
+
+**Why It Matters:** Code will show deprecation warnings.
+
+#### ❌ The Problem
+
+```scala
+val list = List(1, 2, 3)
+val iter = list.toIterator
+```
+
+#### 🔍 How It's Detected
+
+```regex
+\.toIterator\b
+```
+
+#### ✅ The Fix
+
+**BEFORE:**
+```scala
+val iter = list.toIterator
+```
+
+**AFTER:**
+```scala
+val iter = list.iterator
+```
+
+---
+
+### BC-16.4-001g: Scala .view.force
+
+**What Changed:** In Scala 2.13, `.view.force` is deprecated. Use `.view.to(Collection)` instead.
+
+**Why It Matters:** Code will show deprecation warnings.
+
+#### ❌ The Problem
+
+```scala
+val result = list.view.map(_ * 2).force
+```
+
+#### 🔍 How It's Detected
+
+```regex
+\.view\s*\.\s*force\b
+```
+
+#### ✅ The Fix
+
+**BEFORE:**
+```scala
+val result = list.view.map(_ * 2).force
+```
+
+**AFTER:**
+```scala
+val result = list.view.map(_ * 2).to(List)
+```
+
+---
+
+### BC-16.4-001h: Scala collection.Seq
+
+**What Changed:** In Scala 2.13, `scala.collection.Seq` now refers to `scala.collection.immutable.Seq` by default (previously referred to the mutable variant).
+
+**Why It Matters:** Code that relies on `collection.Seq` being mutable may behave differently.
+
+#### ❌ The Problem
+
+```scala
+import scala.collection.Seq
+// In 2.12: Seq was mutable by default
+// In 2.13: Seq is immutable by default
+```
+
+#### 🔍 How It's Detected
+
+```regex
+\bcollection\.Seq\b
+```
+
+#### ✅ The Fix
+
+Use explicit imports:
+```scala
+// For immutable (now the default)
+import scala.collection.immutable.Seq
+
+// For mutable (if you need it)
+import scala.collection.mutable.Seq
+```
+
+---
+
+### BC-16.4-001i: Scala Symbol Literals
+
+**What Changed:** In Scala 2.13, symbol literals (`'symbolName`) are deprecated.
+
+**Why It Matters:** Code will show deprecation warnings.
+
+#### ❌ The Problem
+
+```scala
+val sym = 'mySymbol
+df.col('columnName)
+```
+
+#### 🔍 How It's Detected
+
+```regex
+'[a-zA-Z_][a-zA-Z0-9_]*\b
+```
+
+#### ✅ The Fix
+
+**BEFORE:**
+```scala
+val sym = 'mySymbol
+```
+
+**AFTER:**
+```scala
+val sym = Symbol("mySymbol")
+```
+
+---
+
+### BC-16.4-002: Scala HashMap/HashSet Ordering
+
+**What Changed:** In Scala 2.13, `HashMap` and `HashSet` iteration order changed and is no longer deterministic.
+
+**Why It Matters:** Code that relies on iteration order will produce different results.
+
+#### ❌ The Problem
+
+```scala
+val map = HashMap("a" -> 1, "b" -> 2, "c" -> 3)
+// DON'T rely on iteration order - it changed in 2.13!
+map.keys.foreach(println)
+```
+
+#### 🔍 How It's Detected
+
+```regex
+\b(HashMap|HashSet)\s*[\[\(]
+```
+
+#### ✅ The Fix
+
+If order matters, use `ListMap`, `LinkedHashSet`, or explicit sorting:
+
+**BEFORE:**
+```scala
+val map = HashMap("a" -> 1, "b" -> 2, "c" -> 3)
+map.keys.foreach(println)  // Order not guaranteed!
+```
+
+**AFTER:**
+```scala
+// Option 1: Use ListMap for insertion order
+import scala.collection.immutable.ListMap
+val map = ListMap("a" -> 1, "b" -> 2, "c" -> 3)
+
+// Option 2: Sort explicitly
+HashMap("a" -> 1, "b" -> 2, "c" -> 3).toSeq.sortBy(_._1).foreach(println)
+```
+
+---
+
 ### BC-17.3-002: Auto Loader Incremental Listing
 
 **What Changed:** The default value for `cloudFiles.useIncrementalListing` changed from `auto` to `false` in DBR 17.3.
 
-**Why It Matters:** Auto Loader may behave differently if you relied on the implicit default.
+**Why It Matters:** Auto Loader may have different performance characteristics if you relied on the implicit default.
 
 #### ❌ The Problem
 
@@ -455,10 +737,10 @@ df = (spark.readStream
 #### 🔍 How It's Detected
 
 ```regex
-cloudFiles\.useIncrementalListing
+format\s*\(\s*["']cloudFiles["']\s*\)
 ```
 
-This flags any explicit usage for review to ensure settings are intentional.
+This flags any Auto Loader usage for review to check if the new default affects performance.
 
 #### ✅ The Fix
 
@@ -479,6 +761,61 @@ df = (spark.readStream
     .option("cloudFiles.useIncrementalListing", "auto")  # Explicit setting
     .load("/data/incoming/")
 )
+```
+
+---
+
+### BC-13.3-003: overwriteSchema with Dynamic Partition
+
+**What Changed:** In DBR 13.3+, you cannot combine `overwriteSchema=true` with `partitionOverwriteMode='dynamic'` in the same write operation.
+
+**Why It Matters:** Write operations using both options will fail.
+
+#### ❌ The Problem
+
+```python
+# This combination will fail in DBR 13.3+
+df.write \
+    .option("overwriteSchema", "true") \
+    .option("partitionOverwriteMode", "dynamic") \
+    .mode("overwrite") \
+    .saveAsTable("my_table")
+```
+
+#### 🔍 How It's Detected
+
+```regex
+overwriteSchema.*true
+```
+
+This flags uses of `overwriteSchema=true` for review to check if combined with dynamic partition mode.
+
+#### ✅ The Fix
+
+Separate schema evolution from partition overwrites into distinct operations:
+
+**BEFORE:**
+```python
+df.write \
+    .option("overwriteSchema", "true") \
+    .option("partitionOverwriteMode", "dynamic") \
+    .mode("overwrite") \
+    .saveAsTable("my_table")
+```
+
+**AFTER:**
+```python
+# Step 1: Evolve schema with full overwrite (if needed)
+df.write \
+    .option("overwriteSchema", "true") \
+    .mode("overwrite") \
+    .saveAsTable("my_table")
+
+# Step 2: Use dynamic partition for subsequent writes
+df.write \
+    .option("partitionOverwriteMode", "dynamic") \
+    .mode("overwrite") \
+    .saveAsTable("my_table")
 ```
 
 ---
@@ -763,6 +1100,8 @@ for col_name in cached_columns:
 | ID | Pattern | File Types |
 |----|---------|------------|
 | BC-17.3-001 | `\binput_file_name\s*\(` | .py, .sql, .scala |
+| BC-13.3-001 | `\bMERGE\s+INTO\b` | .py, .sql, .scala |
+| BC-13.3-003 | `overwriteSchema.*true` | .py, .scala |
 | BC-15.4-001 | `VariantType\s*\(` | .py |
 | BC-15.4-003 | `(IF\|IS)\s*!(?!\s*=)` | .sql |
 | BC-15.4-003b | `\s!\s*(IN\|BETWEEN\|LIKE\|EXISTS)\b` | .sql |
@@ -771,7 +1110,13 @@ for col_name in cached_columns:
 | BC-16.4-001c | `\bTraversableOnce\b` | .scala |
 | BC-16.4-001d | `\bTraversable\b(?!Once)` | .scala |
 | BC-16.4-001e | `\bStream\s*\.\s*(from\|...)` | .scala |
-| BC-17.3-002 | `cloudFiles\.useIncrementalListing` | .py, .sql, .scala |
+| BC-16.4-001f | `\.toIterator\b` | .scala |
+| BC-16.4-001g | `\.view\s*\.\s*force\b` | .scala |
+| BC-16.4-001h | `\bcollection\.Seq\b` | .scala |
+| BC-16.4-001i | `'[a-zA-Z_][a-zA-Z0-9_]*\b` | .scala |
+| BC-16.4-002 | `\b(HashMap\|HashSet)\s*[\[\(]` | .scala |
+| BC-17.3-002 | `format\s*\(\s*["']cloudFiles["']\s*\)` | .py, .scala |
+| BC-SC-001 | `except.*AnalysisException` | .py, .scala |
 | BC-SC-002 | Same temp view name used multiple times | .py, .scala |
 | BC-SC-003 | `@udf\s*\(` | .py |
 | BC-SC-004 | `\.(columns\|schema\|dtypes)\b` | .py |
@@ -783,9 +1128,13 @@ for col_name in cached_columns:
 | Category | Auto-Fixed | Manual Review |
 |----------|------------|---------------|
 | **BC-17.3-001** | ✅ DataFrame API, SQL strings | Triple-quoted SQL in complex contexts |
-| **BC-15.4-001** | ❌ | ✅ Requires logic rewrite |
+| **BC-13.3-001** | ❌ | ✅ Review type casting in MERGE |
+| **BC-13.3-003** | ❌ | ✅ Review overwriteSchema usage |
+| **BC-15.4-001** | ❌ | ✅ Test on target DBR or use StringType |
 | **BC-15.4-003** | ✅ All `!` → `NOT` patterns | - |
-| **BC-16.4-001a-e** | ✅ All Scala 2.13 changes | - |
+| **BC-16.4-001a-i** | ✅ All Scala 2.13 changes | BC-16.4-001h (collection.Seq) needs review |
+| **BC-16.4-002** | ❌ | ✅ Review if iteration order matters |
+| **BC-SC-001** | ❌ | ✅ Review exception handling logic |
 | **BC-SC-002** | ❌ | ✅ Flagged for review |
 | **BC-SC-003** | ❌ | ✅ Flagged for review |
 | **BC-SC-004** | ❌ | ✅ Flagged for review |
@@ -1129,11 +1478,11 @@ python validate-migration.py /path/to/notebooks
 
 | Category | Patterns | Primary Action |
 |----------|----------|----------------|
-| **Auto-Fix** | 9 patterns | Run `apply-fixes.py` |
-| **Manual Review** | 4 patterns | Follow guides in this document |
+| **Auto-Fix** | 10 patterns | Run `apply-fixes.py` |
+| **Manual Review** | 12 patterns | Follow guides in this document |
 | **Config Settings** | 4 patterns | Test first, add config only if needed |
 
-### Auto-Fix Patterns (9)
+### Auto-Fix Patterns (10)
 - BC-17.3-001: `input_file_name()`
 - BC-15.4-003: `!` syntax for NOT
 - BC-16.4-001a: JavaConverters
@@ -1141,12 +1490,21 @@ python validate-migration.py /path/to/notebooks
 - BC-16.4-001c: TraversableOnce
 - BC-16.4-001d: Traversable
 - BC-16.4-001e: Stream → LazyList
+- BC-16.4-001f: `.toIterator`
+- BC-16.4-001g: `.view.force`
+- BC-16.4-001i: Symbol literals
 
-### Manual Review Patterns (4)
+### Manual Review Patterns (12)
+- BC-13.3-001: MERGE INTO type casting
+- BC-13.3-003: overwriteSchema + dynamic partition
+- BC-15.4-001: VARIANT type in UDF
+- BC-15.4-004: View column type definition
+- BC-16.4-001h: `collection.Seq` import
+- BC-16.4-002: HashMap/HashSet ordering
+- BC-SC-001: Spark Connect lazy analysis
 - BC-SC-002: Temp view name reuse
 - BC-SC-003: UDF external variable capture
 - BC-SC-004: Schema access in loops
-- BC-15.4-004: View column type definition
 
 ### Config Setting Patterns (4)
 - BC-13.3-002: Parquet Timestamp NTZ

@@ -106,13 +106,13 @@ PATTERNS = [
     },
     {
         "id": "BC-15.4-001",
-        "name": "VARIANT Type in Python UDF (15.4 only)",
-        "severity": "LOW",
+        "name": "VARIANT Type in Python UDF",
+        "severity": "MEDIUM",
         "introduced_in": "15.4",
         "pattern": r"VariantType\s*\(",
         "file_types": [".py"],
-        "description": "VARIANT type not supported in Python UDFs on DBR 15.4 only. RESOLVED in DBR 16.4+ - VARIANT UDFs now work!",
-        "remediation": "Upgrade to DBR 16.4+, or use STRING type with JSON parsing on 15.4"
+        "description": "[REVIEW] VARIANT type in Python UDFs may throw exception in 15.4+. Test on target DBR version.",
+        "remediation": "Test on target DBR, or use STRING type with JSON parsing for safer cross-version compatibility"
     },
     {
         "id": "BC-16.4-001a",
@@ -165,14 +165,74 @@ PATTERNS = [
         "remediation": "Replace Stream with LazyList"
     },
     {
+        "id": "BC-16.4-001f",
+        "name": "Scala .toIterator Deprecated",
+        "severity": "MEDIUM",
+        "introduced_in": "16.4",
+        "pattern": r"\.toIterator\b",
+        "file_types": [".scala"],
+        "description": ".toIterator is deprecated in Scala 2.13",
+        "remediation": "Replace .toIterator with .iterator"
+    },
+    {
+        "id": "BC-16.4-001g",
+        "name": "Scala .view.force Deprecated",
+        "severity": "MEDIUM",
+        "introduced_in": "16.4",
+        "pattern": r"\.view\s*\.\s*force\b",
+        "file_types": [".scala"],
+        "description": ".view.force is deprecated in Scala 2.13",
+        "remediation": "Replace .view.force with .view.to(List) or .view.toList"
+    },
+    {
+        "id": "BC-16.4-001h",
+        "name": "Scala collection.Seq",
+        "severity": "MEDIUM",
+        "introduced_in": "16.4",
+        "pattern": r"\bcollection\.Seq\b",
+        "file_types": [".scala"],
+        "description": "[REVIEW] collection.Seq now refers to immutable.Seq in Scala 2.13",
+        "remediation": "Use explicit immutable.Seq or mutable.Seq import"
+    },
+    {
+        "id": "BC-16.4-001i",
+        "name": "Scala Symbol Literal",
+        "severity": "LOW",
+        "introduced_in": "16.4",
+        "pattern": r"'[a-zA-Z_][a-zA-Z0-9_]*\b",
+        "file_types": [".scala"],
+        "description": "Symbol literals ('symbol) are deprecated in Scala 2.13",
+        "remediation": "Replace 'symbol with Symbol(\"symbol\")"
+    },
+    {
+        "id": "BC-16.4-002",
+        "name": "Scala HashMap/HashSet Ordering",
+        "severity": "HIGH",
+        "introduced_in": "16.4",
+        "pattern": r"\b(HashMap|HashSet)\s*[\[\(]",
+        "file_types": [".scala"],
+        "description": "[REVIEW] HashMap/HashSet iteration order changed in Scala 2.13. Don't rely on order.",
+        "remediation": "If order matters, use explicit sorting or ListMap/LinkedHashSet"
+    },
+    {
+        "id": "BC-13.3-001",
+        "name": "MERGE INTO Type Casting",
+        "severity": "HIGH",
+        "introduced_in": "13.3",
+        "pattern": r"\bMERGE\s+INTO\b",
+        "file_types": [".py", ".sql", ".scala"],
+        "description": "[REVIEW] ANSI mode throws CAST_OVERFLOW for type mismatches. Review type casting.",
+        "remediation": "Add explicit bounds checking for type conversions that may overflow"
+    },
+    {
         "id": "BC-17.3-002",
-        "name": "Auto Loader Incremental Listing",
+        "name": "Auto Loader Usage",
         "severity": "MEDIUM",
         "introduced_in": "17.3",
-        "pattern": r"cloudFiles\.useIncrementalListing",
-        "file_types": [".py", ".scala", ".sql"],
-        "description": "Auto Loader incremental listing default changed to false",
-        "remediation": "Explicitly set cloudFiles.useIncrementalListing if needed"
+        "pattern": r"format\s*\(\s*[\"']cloudFiles[\"']\s*\)",
+        "file_types": [".py", ".scala"],
+        "description": "[REVIEW] Auto Loader incremental listing default changed from 'auto' to 'false' in 17.3. Check performance.",
+        "remediation": "Test performance; if slower, add .option('cloudFiles.useIncrementalListing', 'auto')"
     },
     {
         "id": "BC-13.3-002",

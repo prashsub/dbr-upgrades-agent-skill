@@ -534,6 +534,10 @@ def fix_scala_213_collections(content: str) -> Tuple[str, List[Dict], List[str]]
     - JavaConverters → CollectionConverters
     - .to[List] → .to(List)
     - Traversable → Iterable
+    - Stream → LazyList
+    - .toIterator → .iterator
+    - .view.force → .view.to(List)
+    - 'symbol → Symbol("symbol")
     
     Returns:
         Tuple of (modified_content, applied_fixes, warnings)
@@ -546,7 +550,7 @@ def fix_scala_213_collections(content: str) -> Tuple[str, List[Dict], List[str]]
     new_content, count1 = jc_pattern.subn('import scala.jdk.CollectionConverters._', content)
     if count1:
         applied.append({
-            "fix_id": "BC-16.4-001",
+            "fix_id": "BC-16.4-001a",
             "description": "Replaced JavaConverters with CollectionConverters (Scala 2.13)",
             "count": count1,
             "pattern": "JavaConverters"
@@ -560,7 +564,7 @@ def fix_scala_213_collections(content: str) -> Tuple[str, List[Dict], List[str]]
         new_content, count = pattern.subn(f'.to({coll_type})', content)
         if count:
             applied.append({
-                "fix_id": "BC-16.4-001",
+                "fix_id": "BC-16.4-001b",
                 "description": f"Replaced .to[{coll_type}] with .to({coll_type}) (Scala 2.13)",
                 "count": count,
                 "pattern": f".to[{coll_type}]"
@@ -572,7 +576,7 @@ def fix_scala_213_collections(content: str) -> Tuple[str, List[Dict], List[str]]
     new_content, count3 = trav_once_pattern.subn('IterableOnce', content)
     if count3:
         applied.append({
-            "fix_id": "BC-16.4-001",
+            "fix_id": "BC-16.4-001c",
             "description": "Replaced TraversableOnce with IterableOnce (Scala 2.13)",
             "count": count3,
             "pattern": "TraversableOnce"
@@ -584,10 +588,59 @@ def fix_scala_213_collections(content: str) -> Tuple[str, List[Dict], List[str]]
     new_content, count4 = trav_pattern.subn('Iterable', content)
     if count4:
         applied.append({
-            "fix_id": "BC-16.4-001",
+            "fix_id": "BC-16.4-001d",
             "description": "Replaced Traversable with Iterable (Scala 2.13)",
             "count": count4,
             "pattern": "Traversable"
+        })
+    content = new_content
+    
+    # Pattern 5: Stream.from/continually/iterate → LazyList
+    stream_pattern = re.compile(r'\bStream\s*\.\s*(from|continually|iterate)')
+    new_content, count5 = stream_pattern.subn(r'LazyList.\1', content)
+    if count5:
+        applied.append({
+            "fix_id": "BC-16.4-001e",
+            "description": "Replaced Stream with LazyList (Scala 2.13)",
+            "count": count5,
+            "pattern": "Stream"
+        })
+    content = new_content
+    
+    # Pattern 6: .toIterator → .iterator
+    toiter_pattern = re.compile(r'\.toIterator\b')
+    new_content, count6 = toiter_pattern.subn('.iterator', content)
+    if count6:
+        applied.append({
+            "fix_id": "BC-16.4-001f",
+            "description": "Replaced .toIterator with .iterator (Scala 2.13)",
+            "count": count6,
+            "pattern": ".toIterator"
+        })
+    content = new_content
+    
+    # Pattern 7: .view.force → .view.to(List)
+    # Handle various patterns: .view.map(...).force, .view.filter(...).force, etc.
+    viewforce_pattern = re.compile(r'(\.view(?:\s*\.[^.]+)*)\s*\.\s*force\b')
+    new_content, count7 = viewforce_pattern.subn(r'\1.to(List)', content)
+    if count7:
+        applied.append({
+            "fix_id": "BC-16.4-001g",
+            "description": "Replaced .view.force with .view.to(List) (Scala 2.13)",
+            "count": count7,
+            "pattern": ".view.force"
+        })
+    content = new_content
+    
+    # Pattern 8: 'symbol → Symbol("symbol")
+    symbol_pattern = re.compile(r"'([a-zA-Z_][a-zA-Z0-9_]*)\b")
+    new_content, count8 = symbol_pattern.subn(r'Symbol("\1")', content)
+    if count8:
+        applied.append({
+            "fix_id": "BC-16.4-001i",
+            "description": "Replaced symbol literals with Symbol() (Scala 2.13)",
+            "count": count8,
+            "pattern": "'symbol"
         })
     content = new_content
     
@@ -602,12 +655,50 @@ def fix_scala_213_collections(content: str) -> Tuple[str, List[Dict], List[str]]
             "⚠️  Stream type found - Stream is deprecated in Scala 2.13, consider LazyList"
         )
     
+    if re.search(r'\b(HashMap|HashSet)\s*[\[\(]', content):
+        warnings.append(
+            "⚠️  HashMap/HashSet found - iteration order changed in Scala 2.13. Don't rely on order."
+        )
+    
+    if re.search(r'\bcollection\.Seq\b', content):
+        warnings.append(
+            "⚠️  collection.Seq found - now refers to immutable.Seq in Scala 2.13. Use explicit import."
+        )
+    
     return content, applied, warnings
 
 
 # ============================================================================
 # MAIN FIX APPLICATION LOGIC
 # ============================================================================
+
+def should_apply_fix(fix_ids: Optional[List[str]], fix_id: str, sub_ids: List[str] = None) -> bool:
+    """
+    Check if a fix should be applied based on the requested fix_ids.
+    
+    Args:
+        fix_ids: List of requested fix IDs (or None for all)
+        fix_id: The main fix ID (e.g., 'BC-16.4-001')
+        sub_ids: Optional list of sub-IDs (e.g., ['BC-16.4-001a', 'BC-16.4-001b'])
+    
+    Returns:
+        True if the fix should be applied
+    """
+    if fix_ids is None:
+        return True
+    
+    # Check main fix ID
+    if fix_id in fix_ids:
+        return True
+    
+    # Check sub-IDs
+    if sub_ids:
+        for sub_id in sub_ids:
+            if sub_id in fix_ids:
+                return True
+    
+    return False
+
 
 def apply_fixes_to_content(
     content: str,
@@ -623,9 +714,15 @@ def apply_fixes_to_content(
     all_applied = []
     all_warnings = []
     
+    # Scala 2.13 sub-fix IDs
+    scala_213_sub_ids = [
+        'BC-16.4-001a', 'BC-16.4-001b', 'BC-16.4-001c', 'BC-16.4-001d',
+        'BC-16.4-001e', 'BC-16.4-001f', 'BC-16.4-001g', 'BC-16.4-001i'
+    ]
+    
     if file_type == '.py':
         # BC-17.3-001: input_file_name removal
-        if fix_ids is None or 'BC-17.3-001' in fix_ids:
+        if should_apply_fix(fix_ids, 'BC-17.3-001'):
             content, applied, warnings = fix_python_input_file_name_import(content)
             all_applied.extend(applied)
             all_warnings.extend(warnings)
@@ -636,20 +733,20 @@ def apply_fixes_to_content(
     
     elif file_type == '.scala':
         # BC-17.3-001: input_file_name removal
-        if fix_ids is None or 'BC-17.3-001' in fix_ids:
+        if should_apply_fix(fix_ids, 'BC-17.3-001'):
             content, applied, warnings = fix_scala_input_file_name(content)
             all_applied.extend(applied)
             all_warnings.extend(warnings)
         
-        # BC-16.4-001: Scala 2.13 collections
-        if fix_ids is None or 'BC-16.4-001' in fix_ids:
+        # BC-16.4-001: Scala 2.13 collections (accepts BC-16.4-001 or any sub-ID)
+        if should_apply_fix(fix_ids, 'BC-16.4-001', scala_213_sub_ids):
             content, applied, warnings = fix_scala_213_collections(content)
             all_applied.extend(applied)
             all_warnings.extend(warnings)
     
     elif file_type == '.sql':
         # BC-17.3-001: input_file_name in SQL
-        if fix_ids is None or 'BC-17.3-001' in fix_ids:
+        if should_apply_fix(fix_ids, 'BC-17.3-001'):
             pattern = re.compile(r'\binput_file_name\s*\(\s*\)', re.IGNORECASE)
             new_content, count = pattern.subn('_metadata.file_name', content)
             if count:
@@ -661,8 +758,8 @@ def apply_fixes_to_content(
                 })
             content = new_content
         
-        # BC-15.4-003: ! syntax for NOT
-        if fix_ids is None or 'BC-15.4-003' in fix_ids:
+        # BC-15.4-003: ! syntax for NOT (accepts BC-15.4-003 or BC-15.4-003b)
+        if should_apply_fix(fix_ids, 'BC-15.4-003', ['BC-15.4-003b']):
             content, applied, warnings = fix_sql_not_syntax(content)
             all_applied.extend(applied)
             all_warnings.extend(warnings)
@@ -839,9 +936,49 @@ FIX_DEFINITIONS = {
         "description": "Replaces ! with NOT in SQL (IF ! EXISTS → IF NOT EXISTS)"
     },
     "BC-16.4-001": {
-        "name": "Scala 2.13 Collection Changes",
+        "name": "Scala 2.13 Collection Changes (all)",
         "file_types": [".scala"],
-        "description": "Fixes JavaConverters, .to[List] syntax, Traversable types"
+        "description": "Fixes JavaConverters, .to[List], Traversable, Stream, .toIterator, .view.force, Symbol literals"
+    },
+    "BC-16.4-001a": {
+        "name": "Scala JavaConverters",
+        "file_types": [".scala"],
+        "description": "Replaces JavaConverters with CollectionConverters"
+    },
+    "BC-16.4-001b": {
+        "name": "Scala .to[Collection]",
+        "file_types": [".scala"],
+        "description": "Replaces .to[List] with .to(List)"
+    },
+    "BC-16.4-001c": {
+        "name": "Scala TraversableOnce",
+        "file_types": [".scala"],
+        "description": "Replaces TraversableOnce with IterableOnce"
+    },
+    "BC-16.4-001d": {
+        "name": "Scala Traversable",
+        "file_types": [".scala"],
+        "description": "Replaces Traversable with Iterable"
+    },
+    "BC-16.4-001e": {
+        "name": "Scala Stream",
+        "file_types": [".scala"],
+        "description": "Replaces Stream with LazyList"
+    },
+    "BC-16.4-001f": {
+        "name": "Scala .toIterator",
+        "file_types": [".scala"],
+        "description": "Replaces .toIterator with .iterator"
+    },
+    "BC-16.4-001g": {
+        "name": "Scala .view.force",
+        "file_types": [".scala"],
+        "description": "Replaces .view.force with .view.to(List)"
+    },
+    "BC-16.4-001i": {
+        "name": "Scala Symbol Literals",
+        "file_types": [".scala"],
+        "description": "Replaces 'symbol with Symbol(\"symbol\")"
     },
 }
 
@@ -862,7 +999,7 @@ def main():
     )
     parser.add_argument(
         "--fix", "-f",
-        help="Only apply specific fixes (comma-separated IDs, e.g., BC-17.3-001,BC-15.4-003)"
+        help="Only apply specific fixes (comma-separated IDs, e.g., BC-17.3-001,BC-16.4-001a)"
     )
     parser.add_argument(
         "--backup",

@@ -1,12 +1,19 @@
 {
-  "description": "Machine-readable fix patterns for Databricks LTS migration",
-  "version": "1.0.0",
+  "description": "Machine-readable fix patterns for Databricks LTS migration (35 patterns)",
+  "version": "2.0.0",
   "target_runtime": "17.3 LTS",
+  "pattern_counts": {
+    "auto_fix": 10,
+    "manual_review": 12,
+    "config_check": 8,
+    "total": 35
+  },
   "patterns": [
     {
       "id": "BC-17.3-001",
       "name": "input_file_name() Removed",
       "severity": "HIGH",
+      "category": "auto_fix",
       "introduced_in": "17.3",
       "description": "The input_file_name() function is removed in DBR 17.3",
       "file_types": [".py", ".sql", ".scala"],
@@ -21,11 +28,6 @@
               "description": "Remove import statement",
               "find": "from pyspark.sql.functions import input_file_name",
               "replace": "# input_file_name removed - use _metadata.file_name"
-            },
-            {
-              "description": "Replace in withColumn",
-              "find_regex": "\\.withColumn\\s*\\(\\s*[\"']([^\"']+)[\"']\\s*,\\s*input_file_name\\s*\\(\\s*\\)\\s*\\)",
-              "replace": ".select(\"*\", \"_metadata.file_name\").withColumnRenamed(\"file_name\", \"$1\")"
             },
             {
               "description": "Replace standalone call",
@@ -51,58 +53,47 @@
               "replace": "// input_file_name removed - use _metadata.file_name"
             },
             {
-              "description": "Replace in withColumn",
-              "find_regex": "\\.withColumn\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*input_file_name\\s*\\(\\s*\\)\\s*\\)",
-              "replace": ".select(col(\"*\"), col(\"_metadata.file_name\").as(\"$1\"))"
+              "description": "Replace standalone call",
+              "find_regex": "input_file_name\\s*\\(\\s*\\)",
+              "replace": "col(\"_metadata.file_name\")"
             }
           ]
         }
-      },
-      "validation": {
-        "breaking_absent": "\\binput_file_name\\s*\\(",
-        "replacement_present": "_metadata\\.file_name|_metadata\\[.file_name.\\]"
       }
+    },
+    {
+      "id": "BC-13.3-001",
+      "name": "MERGE INTO Type Casting",
+      "severity": "HIGH",
+      "category": "manual_review",
+      "introduced_in": "13.3",
+      "description": "ANSI mode now throws CAST_OVERFLOW instead of storing NULL",
+      "file_types": [".py", ".sql", ".scala"],
+      "detection": {
+        "pattern": "\\bMERGE\\s+INTO\\b",
+        "flags": "i"
+      },
+      "review_guidance": "Review type casting for potential overflow between source and target columns"
     },
     {
       "id": "BC-15.4-001",
       "name": "VARIANT Type in Python UDF",
-      "severity": "HIGH",
+      "severity": "MEDIUM",
+      "category": "manual_review",
       "introduced_in": "15.4",
-      "description": "VARIANT type is not supported in Python UDFs/UDAFs/UDTFs",
+      "description": "VARIANT type in Python UDFs may throw exception in 15.4+",
       "file_types": [".py"],
       "detection": {
         "pattern": "VariantType\\s*\\(",
         "flags": "i"
       },
-      "fixes": {
-        "python": {
-          "patterns": [
-            {
-              "description": "Replace VariantType import",
-              "find": "from pyspark.sql.types import VariantType",
-              "replace": "from pyspark.sql.types import StringType  # VariantType not supported in Python UDFs"
-            },
-            {
-              "description": "Replace VariantType in return type",
-              "find_regex": "returnType\\s*=\\s*VariantType\\s*\\(\\s*\\)",
-              "replace": "returnType=StringType()  # Use JSON string instead of VARIANT"
-            }
-          ],
-          "notes": [
-            "UDF logic must be updated to work with JSON strings",
-            "Use to_json() before calling UDF and from_json() after",
-            "Consider using SQL functions or Scala UDFs for VARIANT processing"
-          ]
-        }
-      },
-      "validation": {
-        "breaking_absent": "VariantType\\s*\\("
-      }
+      "review_guidance": "Test on target DBR or use StringType + JSON serialization"
     },
     {
       "id": "BC-15.4-003",
       "name": "'!' Syntax for NOT",
       "severity": "MEDIUM",
+      "category": "auto_fix",
       "introduced_in": "15.4",
       "description": "Using '!' instead of 'NOT' outside boolean expressions is disallowed",
       "file_types": [".sql"],
@@ -113,151 +104,449 @@
       "fixes": {
         "sql": {
           "patterns": [
-            {
-              "description": "IF ! EXISTS → IF NOT EXISTS",
-              "find_regex": "IF\\s*!\\s*EXISTS",
-              "replace": "IF NOT EXISTS",
-              "flags": "gi"
-            },
-            {
-              "description": "IS ! NULL → IS NOT NULL",
-              "find_regex": "IS\\s*!\\s*NULL",
-              "replace": "IS NOT NULL",
-              "flags": "gi"
-            },
-            {
-              "description": "! IN → NOT IN",
-              "find_regex": "\\s!\\s*IN\\b",
-              "replace": " NOT IN",
-              "flags": "gi"
-            },
-            {
-              "description": "! BETWEEN → NOT BETWEEN",
-              "find_regex": "\\s!\\s*BETWEEN\\b",
-              "replace": " NOT BETWEEN",
-              "flags": "gi"
-            },
-            {
-              "description": "! LIKE → NOT LIKE",
-              "find_regex": "\\s!\\s*LIKE\\b",
-              "replace": " NOT LIKE",
-              "flags": "gi"
-            },
-            {
-              "description": "! EXISTS → NOT EXISTS",
-              "find_regex": "\\s!\\s*EXISTS\\b",
-              "replace": " NOT EXISTS",
-              "flags": "gi"
-            }
+            {"find_regex": "IF\\s*!\\s*EXISTS", "replace": "IF NOT EXISTS", "flags": "gi"},
+            {"find_regex": "IS\\s*!\\s*NULL", "replace": "IS NOT NULL", "flags": "gi"},
+            {"find_regex": "\\s!\\s*IN\\b", "replace": " NOT IN", "flags": "gi"},
+            {"find_regex": "\\s!\\s*BETWEEN\\b", "replace": " NOT BETWEEN", "flags": "gi"},
+            {"find_regex": "\\s!\\s*LIKE\\b", "replace": " NOT LIKE", "flags": "gi"},
+            {"find_regex": "\\s!\\s*EXISTS\\b", "replace": " NOT EXISTS", "flags": "gi"}
           ]
         }
-      },
-      "validation": {
-        "breaking_absent": "(IF|IS)\\s*!(?!\\s*=)|\\s!\\s*(IN|BETWEEN|LIKE|EXISTS)\\b",
-        "replacement_present": "\\b(IF\\s+NOT\\s+EXISTS|IS\\s+NOT\\s+NULL|NOT\\s+IN|NOT\\s+BETWEEN|NOT\\s+LIKE|NOT\\s+EXISTS)\\b"
       }
     },
     {
-      "id": "BC-16.4-001",
-      "name": "Scala 2.13 Collection Changes",
+      "id": "BC-15.4-004",
+      "name": "VIEW Column Type Definition",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "15.4",
+      "description": "Column types in CREATE VIEW not allowed",
+      "file_types": [".sql"],
+      "detection": {
+        "pattern": "CREATE\\s+(OR\\s+REPLACE\\s+)?VIEW\\s+\\w+\\s*\\([^)]*\\b(INT|STRING|BIGINT|DOUBLE|BOOLEAN|NOT\\s+NULL|DEFAULT)\\b",
+        "flags": "i"
+      },
+      "review_guidance": "Remove type definitions, use CAST in SELECT"
+    },
+    {
+      "id": "BC-15.4-006",
+      "name": "VIEW Schema Binding Mode",
+      "severity": "MEDIUM",
+      "category": "manual_review",
+      "introduced_in": "15.4",
+      "description": "View schema binding behavior changed",
+      "file_types": [".sql"],
+      "detection": {
+        "pattern": "CREATE\\s+(OR\\s+REPLACE\\s+)?VIEW",
+        "flags": "i"
+      },
+      "review_guidance": "Review schema evolution behavior on target DBR"
+    },
+    {
+      "id": "BC-16.4-001a",
+      "name": "Scala JavaConverters",
       "severity": "HIGH",
+      "category": "auto_fix",
       "introduced_in": "16.4",
-      "description": "Scala 2.13 introduces collection library changes",
+      "description": "JavaConverters deprecated in Scala 2.13",
       "file_types": [".scala"],
       "detection": {
-        "pattern": "scala\\.collection\\.JavaConverters|\\.to\\s*\\[\\s*(List|Set|Vector|Seq|Array)\\s*\\]|\\bTraversableOnce\\b|\\bTraversable\\b(?!Once)",
-        "flags": ""
+        "pattern": "scala\\.collection\\.JavaConverters"
       },
       "fixes": {
         "scala": {
           "patterns": [
-            {
-              "description": "JavaConverters → CollectionConverters",
-              "find": "import scala.collection.JavaConverters._",
-              "replace": "import scala.jdk.CollectionConverters._"
-            },
-            {
-              "description": ".to[List] → .to(List)",
-              "find_regex": "\\.to\\s*\\[\\s*List\\s*\\]",
-              "replace": ".to(List)"
-            },
-            {
-              "description": ".to[Set] → .to(Set)",
-              "find_regex": "\\.to\\s*\\[\\s*Set\\s*\\]",
-              "replace": ".to(Set)"
-            },
-            {
-              "description": ".to[Vector] → .to(Vector)",
-              "find_regex": "\\.to\\s*\\[\\s*Vector\\s*\\]",
-              "replace": ".to(Vector)"
-            },
-            {
-              "description": ".to[Seq] → .to(Seq)",
-              "find_regex": "\\.to\\s*\\[\\s*Seq\\s*\\]",
-              "replace": ".to(Seq)"
-            },
-            {
-              "description": ".to[Array] → .to(Array)",
-              "find_regex": "\\.to\\s*\\[\\s*Array\\s*\\]",
-              "replace": ".to(Array)"
-            },
-            {
-              "description": "TraversableOnce → IterableOnce",
-              "find": "TraversableOnce",
-              "replace": "IterableOnce"
-            },
-            {
-              "description": "Traversable → Iterable",
-              "find_regex": "\\bTraversable\\b(?!Once)",
-              "replace": "Iterable"
-            }
+            {"find": "import scala.collection.JavaConverters._", "replace": "import scala.jdk.CollectionConverters._"}
           ]
         }
-      },
-      "validation": {
-        "breaking_absent": "scala\\.collection\\.JavaConverters|\\.to\\s*\\[\\s*(List|Set|Vector|Seq|Array)\\s*\\]|\\bTraversableOnce\\b|\\bTraversable\\b(?!Once)",
-        "replacement_present": "scala\\.jdk\\.CollectionConverters|\\.to\\s*\\(\\s*(List|Set|Vector|Seq|Array)\\s*\\)|\\bIterableOnce\\b|\\bIterable\\b"
       }
+    },
+    {
+      "id": "BC-16.4-001b",
+      "name": "Scala .to[Collection]",
+      "severity": "MEDIUM",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": ".to[Type] syntax changed in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\.to\\s*\\[\\s*(List|Set|Vector|Seq|Array)\\s*\\]"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find_regex": "\\.to\\s*\\[\\s*List\\s*\\]", "replace": ".to(List)"},
+            {"find_regex": "\\.to\\s*\\[\\s*Set\\s*\\]", "replace": ".to(Set)"},
+            {"find_regex": "\\.to\\s*\\[\\s*Vector\\s*\\]", "replace": ".to(Vector)"},
+            {"find_regex": "\\.to\\s*\\[\\s*Seq\\s*\\]", "replace": ".to(Seq)"},
+            {"find_regex": "\\.to\\s*\\[\\s*Array\\s*\\]", "replace": ".to(Array)"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-001c",
+      "name": "Scala TraversableOnce",
+      "severity": "HIGH",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": "TraversableOnce replaced by IterableOnce in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\bTraversableOnce\\b"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find": "TraversableOnce", "replace": "IterableOnce"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-001d",
+      "name": "Scala Traversable",
+      "severity": "HIGH",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": "Traversable replaced by Iterable in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\bTraversable\\b(?!Once)"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find_regex": "\\bTraversable\\b(?!Once)", "replace": "Iterable"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-001e",
+      "name": "Scala Stream",
+      "severity": "MEDIUM",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": "Stream deprecated, use LazyList in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\bStream\\s*\\.\\s*(from|continually|iterate|empty|cons)"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find_regex": "\\bStream\\s*\\.", "replace": "LazyList."}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-001f",
+      "name": "Scala .toIterator",
+      "severity": "MEDIUM",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": ".toIterator deprecated in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\.toIterator\\b"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find": ".toIterator", "replace": ".iterator"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-001g",
+      "name": "Scala .view.force",
+      "severity": "MEDIUM",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": ".view.force deprecated in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\.view\\s*\\.\\s*force\\b"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find_regex": "\\.view(\\s*\\.[^.]+)*\\.force\\b", "replace": ".view$1.to(List)"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-001h",
+      "name": "Scala collection.Seq",
+      "severity": "MEDIUM",
+      "category": "manual_review",
+      "introduced_in": "16.4",
+      "description": "collection.Seq now refers to immutable.Seq in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\bcollection\\.Seq\\b"
+      },
+      "review_guidance": "Use explicit immutable.Seq or mutable.Seq"
+    },
+    {
+      "id": "BC-16.4-001i",
+      "name": "Scala Symbol Literals",
+      "severity": "LOW",
+      "category": "auto_fix",
+      "introduced_in": "16.4",
+      "description": "Symbol literals deprecated in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "'[a-zA-Z_][a-zA-Z0-9_]*"
+      },
+      "fixes": {
+        "scala": {
+          "patterns": [
+            {"find_regex": "'([a-zA-Z_][a-zA-Z0-9_]*)", "replace": "Symbol(\"$1\")"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "BC-16.4-002",
+      "name": "HashMap/HashSet Ordering",
+      "severity": "HIGH",
+      "category": "manual_review",
+      "introduced_in": "16.4",
+      "description": "HashMap/HashSet iteration order changed in Scala 2.13",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "\\b(HashMap|HashSet)\\s*[\\[\\(]"
+      },
+      "review_guidance": "Don't rely on iteration order. Use explicit sorting or ListMap"
+    },
+    {
+      "id": "BC-13.3-002",
+      "name": "Parquet Timestamp NTZ",
+      "severity": "LOW",
+      "category": "config_check",
+      "introduced_in": "13.3",
+      "description": "Parquet timestamp inference behavior changed",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "\\.parquet\\(|read\\.parquet"
+      },
+      "config": {
+        "key": "spark.sql.parquet.inferTimestampNTZ.enabled",
+        "restore_value": "false"
+      }
+    },
+    {
+      "id": "BC-13.3-003",
+      "name": "overwriteSchema + Dynamic Partition",
+      "severity": "MEDIUM",
+      "category": "manual_review",
+      "introduced_in": "13.3",
+      "description": "Cannot combine overwriteSchema=true with dynamic partition overwrites",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "overwriteSchema.*true"
+      },
+      "review_guidance": "Separate schema evolution from partition overwrites"
+    },
+    {
+      "id": "BC-13.3-004",
+      "name": "ANSI Store Assignment Policy",
+      "severity": "LOW",
+      "category": "config_check",
+      "introduced_in": "13.3",
+      "description": "ANSI store assignment policy behavior changed",
+      "file_types": [".py", ".sql", ".scala"],
+      "detection": {
+        "pattern": "spark\\.sql\\.storeAssignmentPolicy"
+      },
+      "config": {
+        "key": "spark.sql.storeAssignmentPolicy",
+        "note": "Review type assignment behavior"
+      }
+    },
+    {
+      "id": "BC-15.4-002",
+      "name": "JDBC Null Calendar",
+      "severity": "LOW",
+      "category": "config_check",
+      "introduced_in": "15.4",
+      "description": "JDBC null calendar handling changed",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "\\.jdbc\\(|read\\.jdbc"
+      },
+      "config": {
+        "key": "spark.sql.legacy.jdbc.useNullCalendar",
+        "restore_value": "false"
+      }
+    },
+    {
+      "id": "BC-15.4-005",
+      "name": "JDBC Reads",
+      "severity": "LOW",
+      "category": "config_check",
+      "introduced_in": "15.4",
+      "description": "JDBC timestamp handling may differ",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "\\.jdbc\\(|\\.format\\s*\\(\\s*[\"']jdbc[\"']\\s*\\)"
+      },
+      "review_guidance": "Test JDBC timestamp handling on target DBR"
+    },
+    {
+      "id": "BC-16.4-003",
+      "name": "Data Source Cache Options",
+      "severity": "MEDIUM",
+      "category": "config_check",
+      "introduced_in": "16.4",
+      "description": "Cached data source reads may ignore options",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "spark\\.sql\\.legacy\\.readFileSourceTableCacheIgnoreOptions"
+      },
+      "config": {
+        "key": "spark.sql.legacy.readFileSourceTableCacheIgnoreOptions",
+        "restore_value": "true"
+      }
+    },
+    {
+      "id": "BC-16.4-004",
+      "name": "MERGE materializeSource",
+      "severity": "LOW",
+      "category": "config_check",
+      "introduced_in": "16.4",
+      "description": "materializeSource=none is no longer allowed",
+      "file_types": [".py", ".sql", ".scala"],
+      "detection": {
+        "pattern": "merge\\.materializeSource.*none"
+      },
+      "fix": "Remove setting or change to 'auto'"
+    },
+    {
+      "id": "BC-16.4-005",
+      "name": "Json4s Library",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "16.4",
+      "description": "Json4s library may have compatibility issues",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "import\\s+org\\.json4s"
+      },
+      "review_guidance": "Review json4s usage for compatibility"
+    },
+    {
+      "id": "BC-16.4-006",
+      "name": "Auto Loader cleanSource",
+      "severity": "MEDIUM",
+      "category": "config_check",
+      "introduced_in": "16.4",
+      "description": "Auto Loader cleanSource behavior changed",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "cloudFiles\\.cleanSource"
+      },
+      "review_guidance": "Review file cleanup behavior and timing"
     },
     {
       "id": "BC-17.3-002",
       "name": "Auto Loader Incremental Listing",
       "severity": "MEDIUM",
+      "category": "config_check",
       "introduced_in": "17.3",
       "description": "Auto Loader incremental listing default changed from 'auto' to 'false'",
       "file_types": [".py", ".scala"],
       "detection": {
-        "pattern": "format\\s*\\(\\s*[\"']cloudFiles[\"']\\s*\\)",
-        "flags": "i"
+        "pattern": "format\\s*\\(\\s*[\"']cloudFiles[\"']\\s*\\)"
       },
-      "fixes": {
-        "python": {
-          "patterns": [
-            {
-              "description": "Add explicit incremental listing option",
-              "find_regex": "(\\.format\\s*\\(\\s*[\"']cloudFiles[\"']\\s*\\))",
-              "replace": "$1\n    .option(\"cloudFiles.useIncrementalListing\", \"auto\")"
-            }
-          ],
-          "notes": [
-            "Only add if you want to preserve old behavior",
-            "Consider migrating to file events: .option('cloudFiles.useNotifications', 'true')"
-          ]
-        },
-        "scala": {
-          "patterns": [
-            {
-              "description": "Add explicit incremental listing option",
-              "find_regex": "(\\.format\\s*\\(\\s*\"cloudFiles\"\\s*\\))",
-              "replace": "$1\n    .option(\"cloudFiles.useIncrementalListing\", \"auto\")"
-            }
-          ]
-        }
-      },
-      "validation": {
-        "manual_review": true,
-        "note": "Review Auto Loader jobs to determine if incremental listing is needed"
+      "config": {
+        "key": "cloudFiles.useIncrementalListing",
+        "restore_value": "auto",
+        "scope": "option"
       }
+    },
+    {
+      "id": "BC-17.3-003",
+      "name": "Spark Connect Null Handling",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "17.3",
+      "description": "Spark Connect handles null literals differently",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "(array|map|struct)\\s*\\("
+      },
+      "review_guidance": "Handle null values explicitly in array/map/struct literals"
+    },
+    {
+      "id": "BC-17.3-004",
+      "name": "Spark Connect Decimal Precision",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "17.3",
+      "description": "Spark Connect decimal precision handling differs",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "DecimalType\\s*\\("
+      },
+      "review_guidance": "Specify precision and scale explicitly"
+    },
+    {
+      "id": "BC-14.3-001",
+      "name": "Thriftserver hive.aux.jars.path",
+      "severity": "LOW",
+      "category": "config_check",
+      "introduced_in": "14.3",
+      "description": "hive.aux.jars.path config removed",
+      "file_types": [".py", ".sql", ".scala"],
+      "detection": {
+        "pattern": "hive\\.aux\\.jars\\.path"
+      },
+      "review_guidance": "Config removed - use alternative approach"
+    },
+    {
+      "id": "BC-SC-001",
+      "name": "Spark Connect Lazy Analysis",
+      "severity": "HIGH",
+      "category": "manual_review",
+      "introduced_in": "13.3",
+      "description": "In Spark Connect, schema validation happens at action time",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "try\\s*:"
+      },
+      "review_guidance": "Add _ = df.columns after transforms to force early validation"
+    },
+    {
+      "id": "BC-SC-003",
+      "name": "UDF Late Binding",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "13.3",
+      "description": "In Spark Connect, UDFs capture variables at execution time",
+      "file_types": [".py"],
+      "detection": {
+        "pattern": "@udf\\s*\\("
+      },
+      "review_guidance": "Use function factory pattern to capture variables at definition time"
+    },
+    {
+      "id": "BC-SC-004",
+      "name": "Schema Access in Loops",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "13.3",
+      "description": "In Spark Connect, schema access triggers RPC call",
+      "file_types": [".py", ".scala"],
+      "detection": {
+        "pattern": "\\.(columns|schema|dtypes)\\b"
+      },
+      "review_guidance": "Cache df.columns outside loop to avoid repeated RPC calls"
     }
   ],
   "legacy_config_flags": [
@@ -266,24 +555,21 @@
       "default_old": "true (infers TIMESTAMP)",
       "default_new": "true (infers TIMESTAMP_NTZ)",
       "set_to_restore": "false",
-      "introduced_in": "13.3",
-      "scope": "session"
+      "introduced_in": "13.3"
     },
     {
       "config": "spark.sql.legacy.jdbc.useNullCalendar",
       "default_old": "false",
       "default_new": "true",
       "set_to_restore": "false",
-      "introduced_in": "15.4",
-      "scope": "session"
+      "introduced_in": "15.4"
     },
     {
       "config": "spark.sql.legacy.readFileSourceTableCacheIgnoreOptions",
-      "default_old": "implicit true behavior",
+      "default_old": "implicit true",
       "default_new": "false",
       "set_to_restore": "true",
-      "introduced_in": "16.4",
-      "scope": "session"
+      "introduced_in": "16.4"
     },
     {
       "config": "cloudFiles.useIncrementalListing",
@@ -291,7 +577,14 @@
       "default_new": "false",
       "set_to_restore": "auto",
       "introduced_in": "17.3",
-      "scope": "option (per-stream)"
+      "scope": "option"
+    },
+    {
+      "config": "spark.databricks.delta.merge.materializeSource",
+      "default_old": "none allowed",
+      "default_new": "none disallowed",
+      "set_to_restore": "auto",
+      "introduced_in": "16.4"
     }
   ]
 }

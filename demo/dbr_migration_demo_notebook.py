@@ -23,27 +23,32 @@
 # MAGIC 
 # MAGIC | Category | Count | Action |
 # MAGIC |----------|-------|--------|
-# MAGIC | 🔴 **Auto-Fix** | 7 | Agent automatically applies fix |
-# MAGIC | 🟡 **Manual Review** | 6 | Agent flags for developer decision |
-# MAGIC | ⚙️ **Config** | 4 | Test first, add config if needed |
+# MAGIC | 🔴 **Auto-Fix** | 10 | Agent automatically applies fix |
+# MAGIC | 🟡 **Manual Review** | 12 | Agent flags for developer decision |
+# MAGIC | ⚙️ **Config** | 8 | Test first, add config if needed |
 # MAGIC 
 # MAGIC ### Quick Reference Table
 # MAGIC 
 # MAGIC | ID | Severity | Change | DBR | Auto-Fix? |
 # MAGIC |----|----------|--------|-----|-----------|
 # MAGIC | BC-17.3-001 | 🔴 HIGH | `input_file_name()` removed | 17.3 | ✅ Yes |
+# MAGIC | BC-13.3-001 | 🔴 HIGH | MERGE INTO type casting (ANSI) | 13.3 | ❌ Manual |
+# MAGIC | BC-16.4-001a-i | 🔴 HIGH | Scala 2.13 collection changes | 16.4 | ✅ Yes |
+# MAGIC | BC-16.4-002 | 🔴 HIGH | HashMap/HashSet ordering | 16.4 | ❌ Manual |
 # MAGIC | BC-15.4-003 | 🟡 MEDIUM | `!` syntax for NOT | 15.4 | ✅ Yes |
-# MAGIC | BC-16.4-001a-e | 🔴 HIGH | Scala 2.13 collection changes | 16.4 | ✅ Yes |
-# MAGIC | BC-15.4-001 | 🟢 LOW | VARIANT in UDF *(15.4 only)* | 15.4 | ❌ Fixed in 16.4 |
+# MAGIC | BC-15.4-001 | 🟡 MEDIUM | VARIANT in UDF | 15.4+ | ❌ Manual |
 # MAGIC | BC-15.4-004 | 🟢 LOW | VIEW column types | 15.4 | ❌ Manual |
-# MAGIC | BC-SC-001 | 🟢 LOW | Lazy schema analysis | 13.3+ | ❌ Manual |
-# MAGIC | BC-SC-002 | 🟡 MEDIUM | Temp view name reuse | 14.3+ | ❌ Manual |
+# MAGIC | BC-15.4-006 | 🟡 MEDIUM | VIEW schema binding mode | 15.4 | ❌ Manual |
+# MAGIC | BC-13.3-003 | 🟡 MEDIUM | overwriteSchema + dynamic partition | 13.3 | ❌ Manual |
+# MAGIC | BC-SC-001 | 🔴 HIGH | Lazy schema analysis | 13.3+ | ❌ Manual |
 # MAGIC | BC-SC-003 | 🟢 LOW | UDF late binding | 14.3+ | ❌ Manual |
 # MAGIC | BC-SC-004 | 🟢 LOW | Schema access in loops | 13.3+ | ❌ Manual |
 # MAGIC | BC-13.3-002 | 🟢 LOW | Parquet timestamp NTZ | 13.3 | ⚙️ Config |
 # MAGIC | BC-15.4-002 | 🟢 LOW | JDBC useNullCalendar | 15.4 | ⚙️ Config |
+# MAGIC | BC-16.4-003 | 🟡 MEDIUM | Data source cache options | 16.4 | ⚙️ Config |
 # MAGIC | BC-16.4-004 | 🟢 LOW | MERGE materializeSource | 16.4 | ⚙️ Config |
 # MAGIC | BC-17.3-002 | 🟡 MEDIUM | Auto Loader incremental listing | 17.3 | ⚙️ Config |
+# MAGIC | BC-17.3-003 | 🟢 LOW | Spark Connect null handling | 17.3 | ❌ Manual |
 
 # COMMAND ----------
 
@@ -187,6 +192,66 @@ print(f"Processed {processed_df.count()} records with source file tracking")
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
+# MAGIC ## BC-13.3-001: MERGE INTO Type Casting (ANSI Mode)
+# MAGIC 
+# MAGIC ### 📖 What Changed
+# MAGIC 
+# MAGIC MERGE INTO and UPDATE operations now follow `spark.sql.storeAssignmentPolicy` (default: ANSI). Values that **overflow** the target column type now **throw an error** instead of silently storing NULL.
+# MAGIC 
+# MAGIC | DBR Version | Overflow Behavior |
+# MAGIC |-------------|-------------------|
+# MAGIC | < 13.3 | ⚠️ Silently stores NULL |
+# MAGIC | **13.3+** | ❌ **CAST_OVERFLOW error** |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [DBR 13.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/13.3lts.html)
+# MAGIC - [ANSI Mode](https://docs.databricks.com/en/sql/language-manual/sql-ref-ansi-compliance.html)
+# MAGIC 
+# MAGIC ### 🔍 How the Agent Detects It
+# MAGIC 
+# MAGIC **Detection Pattern:** `\bMERGE\s+INTO\b`
+# MAGIC 
+# MAGIC Flags all MERGE INTO statements for review of type casting compatibility.
+# MAGIC 
+# MAGIC ### 📋 Decision Matrix
+# MAGIC 
+# MAGIC | Source Type | Target Type | Action |
+# MAGIC |-------------|-------------|--------|
+# MAGIC | BIGINT | INT | ⚠️ Potential overflow - add explicit CAST with bounds check |
+# MAGIC | DOUBLE | DECIMAL | ⚠️ Precision loss - verify or widen target |
+# MAGIC | Same types | Same types | ✅ No action needed |
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC -- ============================================================================
+# MAGIC -- BC-13.3-001: MERGE INTO with potential type overflow
+# MAGIC -- ============================================================================
+# MAGIC 
+# MAGIC -- ❌ POTENTIAL ISSUE: If source.value > 2147483647, this will throw CAST_OVERFLOW
+# MAGIC -- MERGE INTO target_table AS t
+# MAGIC -- USING source_table AS s
+# MAGIC -- ON t.id = s.id
+# MAGIC -- WHEN MATCHED THEN UPDATE SET t.int_column = s.bigint_column;  -- BIGINT → INT
+# MAGIC 
+# MAGIC -- ✅ FIX: Add explicit bounds checking
+# MAGIC -- MERGE INTO target_table AS t
+# MAGIC -- USING source_table AS s  
+# MAGIC -- ON t.id = s.id
+# MAGIC -- WHEN MATCHED THEN UPDATE SET
+# MAGIC --     t.int_column = CASE 
+# MAGIC --         WHEN s.bigint_column > 2147483647 THEN NULL 
+# MAGIC --         WHEN s.bigint_column < -2147483648 THEN NULL
+# MAGIC --         ELSE CAST(s.bigint_column AS INT) 
+# MAGIC --     END;
+# MAGIC 
+# MAGIC SELECT 'BC-13.3-001: MERGE INTO type casting - review all MERGE statements' as guidance;
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC 
 # MAGIC ## BC-15.4-003: `!` Syntax for NOT Disallowed
 # MAGIC 
 # MAGIC ### 📖 What Changed
@@ -315,17 +380,15 @@ taxi_df.createOrReplaceTempView("taxi_trips")
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
-# MAGIC Python UDFs using `VARIANT` type as input or output **threw an exception in DBR 15.4 only**.
+# MAGIC Python UDFs using `VARIANT` type as input or output **may throw exceptions** starting in DBR 15.4+.
 # MAGIC 
 # MAGIC | DBR Version | VARIANT in UDF |
 # MAGIC |-------------|----------------|
 # MAGIC | 13.3 LTS | N/A (VARIANT not available) |
 # MAGIC | 14.3 LTS | ✅ Works |
-# MAGIC | **15.4 LTS** | ❌ **FAILS** |
-# MAGIC | 16.4 LTS | ✅ Works |
-# MAGIC | 17.3 LTS | ✅ Works |
+# MAGIC | **15.4+ LTS** | ⚠️ **May fail** - test your specific use case |
 # MAGIC 
-# MAGIC > ✅ **RESOLVED:** If upgrading to 16.4 or 17.3, **no action needed!**
+# MAGIC > ⚠️ **REVIEW RECOMMENDED:** Test VARIANT UDFs on your target DBR version. Consider using StringType + JSON as a safer alternative.
 # MAGIC 
 # MAGIC ### 📚 Official Documentation
 # MAGIC - [DBR 15.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/15.4lts.html)
@@ -340,22 +403,22 @@ taxi_df.createOrReplaceTempView("taxi_trips")
 # MAGIC 
 # MAGIC ### 📋 Decision Matrix
 # MAGIC 
-# MAGIC | Target DBR | Action |
-# MAGIC |------------|--------|
-# MAGIC | 15.4 | ✅ **FIX**: Use StringType + json.dumps |
-# MAGIC | 16.4+ | ❌ **No action needed** |
+# MAGIC | Scenario | Action |
+# MAGIC |----------|--------|
+# MAGIC | UDF uses VariantType | ⚠️ **TEST** on target DBR or use StringType + json.dumps |
+# MAGIC | Complex nested VARIANT | ✅ **FIX**: Use StringType + json.dumps for safety |
 
 # COMMAND ----------
 
 # ============================================================================
-# BC-15.4-001: VARIANT type in Python UDF (15.4 only)
+# BC-15.4-001: VARIANT type in Python UDF
 # ============================================================================
-# This code FAILS on DBR 15.4 only - works fine on 16.4+!
+# This code MAY FAIL on DBR 15.4+ - test on your target version!
 
 from pyspark.sql.functions import udf
 from pyspark.sql.types import VariantType, StringType
 
-# ❌ Pattern 1: UDF returning VARIANT (fails on 15.4 only)
+# ⚠️ Pattern 1: UDF returning VARIANT (may throw exception in 15.4+)
 @udf(returnType=VariantType())
 def create_trip_metadata(fare, tip, total):
     """Create a VARIANT containing trip metadata"""
@@ -377,7 +440,7 @@ print("Created DataFrame with VARIANT column")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### ✅ FIX (For DBR 15.4 Only)
+# MAGIC ### ✅ RECOMMENDED FIX (Safer Alternative)
 # MAGIC 
 # MAGIC ```python
 # MAGIC import json
@@ -396,7 +459,7 @@ print("Created DataFrame with VARIANT column")
 # MAGIC # df.select(parse_json(col("trip_meta")))
 # MAGIC ```
 # MAGIC 
-# MAGIC > **Note:** If upgrading directly to 16.4 or 17.3, your VARIANT UDFs will work!
+# MAGIC > **Note:** Using StringType + JSON is the safest approach for cross-version compatibility.
 
 # COMMAND ----------
 
@@ -1176,6 +1239,136 @@ print(scala_example_1e)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## BC-16.4-001f: .toIterator → .iterator
+# MAGIC 
+# MAGIC ### 🔍 Detection Pattern
+# MAGIC ```
+# MAGIC \.toIterator\b
+# MAGIC ```
+
+# COMMAND ----------
+
+scala_example_1f = '''
+// ❌ BEFORE (deprecated in Scala 2.13)
+val iter = myList.toIterator
+
+// ✅ AFTER
+val iter = myList.iterator
+'''
+print("=== BC-16.4-001f: .toIterator Deprecated ===")
+print(scala_example_1f)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## BC-16.4-001g: .view.force → .view.to(List)
+# MAGIC 
+# MAGIC ### 🔍 Detection Pattern
+# MAGIC ```
+# MAGIC \.view\s*\.\s*force\b
+# MAGIC ```
+
+# COMMAND ----------
+
+scala_example_1g = '''
+// ❌ BEFORE (deprecated in Scala 2.13)
+val result = myList.view.map(_ * 2).force
+
+// ✅ AFTER
+val result = myList.view.map(_ * 2).to(List)
+// or
+val result = myList.view.map(_ * 2).toList
+'''
+print("=== BC-16.4-001g: .view.force Deprecated ===")
+print(scala_example_1g)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## BC-16.4-001h: collection.Seq Changed to Immutable
+# MAGIC 
+# MAGIC ### 🔍 Detection Pattern
+# MAGIC ```
+# MAGIC \bcollection\.Seq\b
+# MAGIC ```
+# MAGIC 
+# MAGIC **Impact:** In Scala 2.13, `collection.Seq` refers to `immutable.Seq` by default.
+
+# COMMAND ----------
+
+scala_example_1h = '''
+// ❌ BEFORE (may be mutable in Scala 2.12)
+import scala.collection.Seq
+val mySeq: Seq[Int] = ???
+
+// ✅ AFTER (be explicit)
+import scala.collection.immutable.Seq  // or mutable.Seq if needed
+val mySeq: Seq[Int] = ???
+'''
+print("=== BC-16.4-001h: collection.Seq Changed ===")
+print(scala_example_1h)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## BC-16.4-001i: Symbol Literals Deprecated
+# MAGIC 
+# MAGIC ### 🔍 Detection Pattern
+# MAGIC ```
+# MAGIC '[a-zA-Z_][a-zA-Z0-9_]*
+# MAGIC ```
+
+# COMMAND ----------
+
+scala_example_1i = '''
+// ❌ BEFORE (deprecated in Scala 2.13)
+val sym = 'mySymbol
+
+// ✅ AFTER
+val sym = Symbol("mySymbol")
+'''
+print("=== BC-16.4-001i: Symbol Literals Deprecated ===")
+print(scala_example_1i)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## BC-16.4-002: HashMap/HashSet Ordering Changed
+# MAGIC 
+# MAGIC ### 📖 What Changed
+# MAGIC 
+# MAGIC In Scala 2.13, HashMap and HashSet **may iterate in different order** than in 2.12.
+# MAGIC 
+# MAGIC ### 🔍 Detection Pattern
+# MAGIC ```
+# MAGIC \b(HashMap|HashSet)\s*[\[\(]
+# MAGIC ```
+# MAGIC 
+# MAGIC ### 📋 Impact
+# MAGIC - Code relying on implicit iteration order will break
+# MAGIC - Tests comparing collections by order will fail
+# MAGIC - Serialization depending on iteration order affected
+
+# COMMAND ----------
+
+scala_example_2 = '''
+// ❌ BAD: Relies on iteration order (WILL DIFFER in 2.13!)
+val map = HashMap("a" -> 1, "b" -> 2, "c" -> 3)
+map.foreach { case (k, v) => println(s"$k: $v") }  // Order may differ!
+
+// ✅ GOOD: Explicit ordering
+map.toSeq.sortBy(_._1).foreach { case (k, v) => println(s"$k: $v") }
+
+// ✅ GOOD: Use order-preserving collection
+import scala.collection.immutable.ListMap
+val orderedMap = ListMap("a" -> 1, "b" -> 2, "c" -> 3)
+'''
+print("=== BC-16.4-002: HashMap/HashSet Ordering ===")
+print(scala_example_2)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ---
 # MAGIC # 📊 COMPLETE SUMMARY
 # MAGIC ---
@@ -1185,7 +1378,7 @@ print(scala_example_1e)
 # MAGIC %md
 # MAGIC ## Quick Reference: All Breaking Changes
 # MAGIC 
-# MAGIC ### 🔴 Auto-Fix (7 patterns)
+# MAGIC ### 🔴 Auto-Fix (10 patterns)
 # MAGIC 
 # MAGIC | ID | Pattern | Fix | File Types |
 # MAGIC |----|---------|-----|------------|
@@ -1196,26 +1389,39 @@ print(scala_example_1e)
 # MAGIC | BC-16.4-001c | `TraversableOnce` | `IterableOnce` | .scala |
 # MAGIC | BC-16.4-001d | `Traversable` | `Iterable` | .scala |
 # MAGIC | BC-16.4-001e | `Stream.from()` | `LazyList.from()` | .scala |
+# MAGIC | BC-16.4-001f | `.toIterator` | `.iterator` | .scala |
+# MAGIC | BC-16.4-001g | `.view.force` | `.view.to(List)` | .scala |
+# MAGIC | BC-16.4-001i | `'symbol` literal | `Symbol("symbol")` | .scala |
 # MAGIC 
-# MAGIC ### 🟡 Manual Review (6 patterns)
+# MAGIC ### 🟡 Manual Review (12 patterns)
 # MAGIC 
 # MAGIC | ID | Pattern | Decision |
 # MAGIC |----|---------|----------|
-# MAGIC | BC-15.4-001 | `VariantType()` in UDF | Skip if upgrading to 16.4+ |
+# MAGIC | BC-13.3-001 | `MERGE INTO` | Review type casting for overflow |
+# MAGIC | BC-13.3-003 | `overwriteSchema` + dynamic partition | Separate operations |
+# MAGIC | BC-15.4-001 | `VariantType()` in UDF | Use StringType + JSON |
 # MAGIC | BC-15.4-004 | `CREATE VIEW (col TYPE)` | Remove types, cast in SELECT |
+# MAGIC | BC-15.4-006 | `CREATE VIEW` | Review schema binding changes |
+# MAGIC | BC-16.4-002 | `HashMap`/`HashSet` | Don't rely on iteration order |
+# MAGIC | BC-16.4-001h | `collection.Seq` | Use explicit immutable/mutable |
 # MAGIC | BC-SC-001 | try/except around transforms | Add `df.columns` for validation |
-# MAGIC | BC-SC-002 | Same temp view name reused | Add UUID to names |
 # MAGIC | BC-SC-003 | UDF captures external variable | Use function factory |
 # MAGIC | BC-SC-004 | `df.columns` in loop | Cache outside loop |
+# MAGIC | BC-17.3-003 | `array`/`map`/`struct` literals | Handle nulls explicitly |
+# MAGIC | BC-17.3-005 | `DecimalType` | Specify precision/scale |
 # MAGIC 
-# MAGIC ### ⚙️ Config Settings (4 patterns)
+# MAGIC ### ⚙️ Config Settings (8 patterns)
 # MAGIC 
 # MAGIC | ID | Test First | Config If Needed |
 # MAGIC |----|------------|------------------|
 # MAGIC | BC-13.3-002 | Check Parquet timestamps | `spark.sql.parquet.inferTimestampNTZ.enabled` = `false` |
+# MAGIC | BC-13.3-004 | Check MERGE/UPDATE errors | `spark.sql.storeAssignmentPolicy` |
 # MAGIC | BC-15.4-002 | Check JDBC timestamps | `spark.sql.legacy.jdbc.useNullCalendar` = `false` |
+# MAGIC | BC-16.4-003 | Check cached data source reads | `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` |
 # MAGIC | BC-16.4-004 | Check for `"none"` setting | Remove or change to `"auto"` |
+# MAGIC | BC-16.4-006 | Check Auto Loader cleanup | `cloudFiles.cleanSource` setting |
 # MAGIC | BC-17.3-002 | Check Auto Loader speed | `cloudFiles.useIncrementalListing` = `"auto"` |
+# MAGIC | BC-15.4-005 | Check JDBC reads | Test timestamp handling |
 
 # COMMAND ----------
 
@@ -1231,7 +1437,7 @@ print(scala_example_1e)
 # MAGIC Scan this notebook for breaking changes when upgrading to DBR 17.3
 # MAGIC ```
 # MAGIC 
-# MAGIC **Expected Result:** Assistant identifies all 17 breaking change patterns
+# MAGIC **Expected Result:** Assistant identifies the breaking change patterns demonstrated in this notebook (see summary tables for pattern IDs that have code examples vs. those listed for reference only)
 # MAGIC 
 # MAGIC ### Step 2: Review the Findings
 # MAGIC 

@@ -1,6 +1,6 @@
 {
   "description": "Databricks LTS Runtime Version Matrix",
-  "last_updated": "2026-01-23",
+  "last_updated": "2026-01-26",
   "versions": [
     {
       "runtime": "13.3 LTS",
@@ -48,7 +48,7 @@
         "Improved Unity Catalog",
         "Better error messages"
       ],
-      "breaking_changes": ["BC-15.4-001", "BC-15.4-002", "BC-15.4-003", "BC-15.4-004", "BC-15.4-005"]
+      "breaking_changes": ["BC-15.4-001", "BC-15.4-002", "BC-15.4-003", "BC-15.4-004", "BC-15.4-005", "BC-15.4-006"]
     },
     {
       "runtime": "16.4 LTS",
@@ -64,7 +64,7 @@
         "Python 3.12",
         "Spark 3.5.2 improvements"
       ],
-      "breaking_changes": ["BC-16.4-001", "BC-16.4-002", "BC-16.4-003", "BC-16.4-004", "BC-16.4-005"],
+      "breaking_changes": ["BC-16.4-001a", "BC-16.4-001b", "BC-16.4-001c", "BC-16.4-001d", "BC-16.4-001e", "BC-16.4-001f", "BC-16.4-001g", "BC-16.4-001h", "BC-16.4-001i", "BC-16.4-002", "BC-16.4-003", "BC-16.4-004", "BC-16.4-005", "BC-16.4-006"],
       "notes": "CRITICAL: Scala 2.13 migration required for Scala code"
     },
     {

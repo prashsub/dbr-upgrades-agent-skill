@@ -2,8 +2,14 @@
 # MAGIC %md
 # MAGIC # DBR Migration - Workspace Breaking Changes Profiler
 # MAGIC 
-# MAGIC This notebook scans all workflows and notebooks in your workspace for breaking changes
+# MAGIC This notebook scans **notebook tasks** in jobs and workspace notebooks for breaking changes
 # MAGIC between DBR 13.3 LTS and 17.3 LTS.
+# MAGIC 
+# MAGIC ## Scope & Limitations
+# MAGIC - **Scans:** Notebook tasks in jobs, workspace notebooks
+# MAGIC - **Does NOT scan:** Python wheel tasks, JAR tasks, SQL tasks, spark_python_task, spark_submit_task, DLT pipelines, dbt tasks, or files in Repos/Git
+# MAGIC - **Detection method:** Regex pattern matching (static analysis only)
+# MAGIC - **Not all breaking changes are detectable** - some are runtime behavioral changes (e.g., file modification detection in 13.3)
 # MAGIC 
 # MAGIC ## Output
 # MAGIC - **Delta Table**: `{catalog}.{schema}.dbr_migration_scan_results`
@@ -13,6 +19,7 @@
 # MAGIC 1. Configure the parameters below
 # MAGIC 2. Run all cells
 # MAGIC 3. Review results in the output table
+# MAGIC 4. **Important:** Manual review still required for behavioral changes not detectable by pattern matching
 
 # COMMAND ----------
 
@@ -130,7 +137,9 @@ class BreakingChangePattern:
 
 # All breaking change patterns to scan for
 BREAKING_PATTERNS = [
-    # HIGH SEVERITY
+    # ============================================================
+    # HIGH SEVERITY - Will cause immediate failures
+    # ============================================================
     BreakingChangePattern(
         id="BC-17.3-001",
         name="input_file_name() Removed",
@@ -140,16 +149,6 @@ BREAKING_PATTERNS = [
         file_types=[".py", ".sql", ".scala"],
         description="input_file_name() function is removed in DBR 17.3",
         remediation="Replace with _metadata.file_name"
-    ),
-    BreakingChangePattern(
-        id="BC-15.4-001",
-        name="VARIANT Type in Python UDF (15.4 only)",
-        severity="LOW",
-        introduced_in="15.4",
-        pattern=r"VariantType\s*\(",
-        file_types=[".py"],
-        description="VARIANT type not supported in Python UDFs on DBR 15.4 only. RESOLVED in DBR 16.4+ - VARIANT UDFs now work!",
-        remediation="Upgrade to DBR 16.4+, or use STRING type with JSON parsing on 15.4"
     ),
     BreakingChangePattern(
         id="BC-16.4-001a",
@@ -181,8 +180,40 @@ BREAKING_PATTERNS = [
         description="Traversable is renamed to Iterable in Scala 2.13",
         remediation="Replace Traversable with Iterable"
     ),
+    BreakingChangePattern(
+        id="BC-16.4-002",
+        name="Scala HashMap/HashSet Ordering",
+        severity="HIGH",
+        introduced_in="16.4",
+        pattern=r"\b(HashMap|HashSet)\s*[\[\(]",
+        file_types=[".scala"],
+        description="[Review] HashMap/HashSet iteration order changed in Scala 2.13",
+        remediation="Don't rely on iteration order; use LinkedHashMap/ListMap or explicit sorting"
+    ),
+    BreakingChangePattern(
+        id="BC-13.3-001",
+        name="MERGE INTO Type Casting (Review)",
+        severity="HIGH",
+        introduced_in="13.3",
+        pattern=r"\bMERGE\s+INTO\b",
+        file_types=[".py", ".sql", ".scala"],
+        description="[Review] MERGE/UPDATE now follows ANSI casting - overflow throws error instead of NULL",
+        remediation="Ensure source/target column types match or use explicit CAST with overflow handling"
+    ),
+    BreakingChangePattern(
+        id="BC-SC-001",
+        name="Spark Connect Lazy Analysis (Review)",
+        severity="HIGH",
+        introduced_in="13.3",
+        pattern=r"except\s+.*(?:AnalysisException|SparkException|IllegalArgumentException)",
+        file_types=[".py", ".scala"],
+        description="[Review] Spark Connect defers schema analysis - these exceptions may not be caught until action time",
+        remediation="Trigger eager analysis with df.columns or df.schema after transformations if error handling is needed"
+    ),
     
-    # MEDIUM SEVERITY
+    # ============================================================
+    # MEDIUM SEVERITY - May cause failures or incorrect results
+    # ============================================================
     BreakingChangePattern(
         id="BC-15.4-003",
         name="'!' Syntax for NOT",
@@ -224,6 +255,46 @@ BREAKING_PATTERNS = [
         remediation="Replace Stream with LazyList"
     ),
     BreakingChangePattern(
+        id="BC-16.4-001f",
+        name="Scala .toIterator Deprecated",
+        severity="MEDIUM",
+        introduced_in="16.4",
+        pattern=r"\.toIterator\b",
+        file_types=[".scala"],
+        description=".toIterator is deprecated in Scala 2.13",
+        remediation="Use .iterator instead of .toIterator"
+    ),
+    BreakingChangePattern(
+        id="BC-16.4-001g",
+        name="Scala .view.force Deprecated",
+        severity="MEDIUM",
+        introduced_in="16.4",
+        pattern=r"\.view\s*\.\s*force\b",
+        file_types=[".scala"],
+        description=".view.force is deprecated in Scala 2.13",
+        remediation="Use .view.to(List) or .view.toList instead"
+    ),
+    BreakingChangePattern(
+        id="BC-16.4-001h",
+        name="Scala collection.Seq Changed",
+        severity="MEDIUM",
+        introduced_in="16.4",
+        pattern=r"\bcollection\.Seq\b(?!\.)",
+        file_types=[".scala"],
+        description="collection.Seq now refers to immutable.Seq in Scala 2.13",
+        remediation="Use collection.immutable.Seq or collection.mutable.Seq explicitly"
+    ),
+    BreakingChangePattern(
+        id="BC-13.3-003",
+        name="overwriteSchema with Dynamic Partition",
+        severity="MEDIUM",
+        introduced_in="13.3",
+        pattern=r"overwriteSchema.*true",
+        file_types=[".py", ".scala"],
+        description="[Review] overwriteSchema=true found - verify it's not combined with partitionOverwriteMode='dynamic' (fails in 13.3+)",
+        remediation="If also using dynamic partition overwrite, separate into distinct operations"
+    ),
+    BreakingChangePattern(
         id="BC-17.3-002",
         name="Auto Loader Incremental Listing",
         severity="MEDIUM",
@@ -234,17 +305,53 @@ BREAKING_PATTERNS = [
         remediation="Explicitly set cloudFiles.useIncrementalListing if needed"
     ),
     BreakingChangePattern(
-        id="BC-SC-002",
-        name="Temp View Name Reuse Risk",
+        id="BC-17.3-002b",
+        name="Auto Loader Default Behavior (Review)",
         severity="MEDIUM",
-        introduced_in="13.3",
-        pattern=r"createOrReplaceTempView\s*\(\s*[\"'][^\"']+[\"']\s*\)",
+        introduced_in="17.3",
+        pattern=r"\.format\s*\(\s*[\"']cloudFiles[\"']\s*\)",
         file_types=[".py", ".scala"],
-        description="Spark Connect: temp views should use unique names",
-        remediation="Consider using UUID in temp view names for concurrent sessions"
+        description="[Review] Auto Loader now does full directory listings by default (not incremental)",
+        remediation="Add .option('cloudFiles.useIncrementalListing', 'auto') to preserve old behavior"
     ),
+    BreakingChangePattern(
+        id="BC-16.4-006",
+        name="Auto Loader cleanSource Behavior",
+        severity="MEDIUM",
+        introduced_in="16.4",
+        pattern=r"cloudFiles\.cleanSource",
+        file_types=[".py", ".scala", ".sql"],
+        description="[Review] cloudFiles.cleanSource behavior changed in 16.4",
+        remediation="Review cleanSource settings; behavior for file cleanup may differ"
+    ),
+    BreakingChangePattern(
+        id="BC-15.4-006",
+        name="View Schema Binding Mode",
+        severity="MEDIUM",
+        introduced_in="15.4",
+        pattern=r"CREATE\s+(OR\s+REPLACE\s+)?VIEW\b",
+        file_types=[".sql"],
+        description="[Review] View schema binding default changed from BINDING to schema compensation",
+        remediation="Verify view definitions handle underlying table schema changes correctly"
+    ),
+    BreakingChangePattern(
+        id="BC-16.4-003",
+        name="Data Source Cache Options Setting",
+        severity="MEDIUM",
+        introduced_in="16.4",
+        pattern=r"spark\.sql\.legacy\.readFileSourceTableCacheIgnoreOptions",
+        file_types=[".py", ".scala", ".sql"],
+        description="Table reads now respect options for all cached plans",
+        remediation="Set spark.sql.legacy.readFileSourceTableCacheIgnoreOptions=true to restore old behavior"
+    ),
+    # NOTE: BC-SC-002 removed - was flagging ALL temp views which caused over-reporting.
+    # Duplicate temp view detection (BC-SC-002-DUP) in scan_duplicate_temp_views() handles
+    # the actual risk of reusing the same view name. See Spark Connect guidance:
+    # https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic
     
-    # LOW SEVERITY
+    # ============================================================
+    # LOW SEVERITY - Informational or subtle behavior changes
+    # ============================================================
     BreakingChangePattern(
         id="BC-13.3-002",
         name="Parquet Timestamp NTZ Setting",
@@ -254,6 +361,36 @@ BREAKING_PATTERNS = [
         file_types=[".py", ".scala", ".sql"],
         description="Parquet timestamp inference behavior changed",
         remediation="Set spark.sql.parquet.inferTimestampNTZ.enabled explicitly"
+    ),
+    BreakingChangePattern(
+        id="BC-13.3-002b",
+        name="Parquet Read (TIMESTAMP_NTZ Review)",
+        severity="LOW",
+        introduced_in="13.3",
+        pattern=r"\.parquet\s*\(|\.format\s*\(\s*[\"']parquet[\"']\s*\)",
+        file_types=[".py", ".scala"],
+        description="[Review] Parquet reads may infer TIMESTAMP_NTZ differently in 13.3+",
+        remediation="Set spark.sql.parquet.inferTimestampNTZ.enabled=false or use explicit schema"
+    ),
+    BreakingChangePattern(
+        id="BC-13.3-004",
+        name="ANSI Store Assignment Policy",
+        severity="LOW",
+        introduced_in="13.3",
+        pattern=r"spark\.sql\.storeAssignmentPolicy",
+        file_types=[".py", ".scala", ".sql"],
+        description="[Review] storeAssignmentPolicy default is ANSI - overflow throws error",
+        remediation="Ensure MERGE/UPDATE operations handle type casting explicitly"
+    ),
+    BreakingChangePattern(
+        id="BC-15.4-001",
+        name="VARIANT Type in Python UDF",
+        severity="MEDIUM",
+        introduced_in="15.4",
+        pattern=r"VariantType\s*\(",
+        file_types=[".py"],
+        description="[Review] VARIANT type in Python UDF/UDAF/UDTF may throw exception in DBR 15.4+",
+        remediation="Use STRING type with JSON serialization, or Scala UDFs for VARIANT handling"
     ),
     BreakingChangePattern(
         id="BC-15.4-002",
@@ -276,6 +413,26 @@ BREAKING_PATTERNS = [
         remediation="Remove column type specifications from CREATE VIEW"
     ),
     BreakingChangePattern(
+        id="BC-14.3-001",
+        name="Thriftserver hive.aux.jars.path Removed",
+        severity="LOW",
+        introduced_in="14.3",
+        pattern=r"hive\.aux\.jars\.path|hive\.server2\.global\.init\.file\.location",
+        file_types=[".py", ".scala", ".sql"],
+        description="Hive auxiliary JARs and global init file configs removed",
+        remediation="Use cluster init scripts or Unity Catalog volumes for JARs"
+    ),
+    BreakingChangePattern(
+        id="BC-16.4-001i",
+        name="Scala Symbol Literal Deprecated",
+        severity="LOW",
+        introduced_in="16.4",
+        pattern=r"'[a-zA-Z_][a-zA-Z0-9_]*(?![a-zA-Z0-9_'])",
+        file_types=[".scala"],
+        description="Symbol literals ('symbol) are deprecated in Scala 2.13",
+        remediation="Use Symbol(\"symbol\") constructor instead"
+    ),
+    BreakingChangePattern(
         id="BC-16.4-004",
         name="MERGE materializeSource=none",
         severity="LOW",
@@ -286,6 +443,36 @@ BREAKING_PATTERNS = [
         remediation="Remove merge.materializeSource=none configuration"
     ),
     BreakingChangePattern(
+        id="BC-16.4-005",
+        name="Json4s Library Usage (Review)",
+        severity="LOW",
+        introduced_in="16.4",
+        pattern=r"import\s+org\.json4s",
+        file_types=[".scala"],
+        description="[Review] Json4s downgraded from 4.0.7 to 3.7.0-M11 for Scala 2.13",
+        remediation="Review Json4s API usage for compatibility with 3.7.x"
+    ),
+    BreakingChangePattern(
+        id="BC-17.3-003",
+        name="Spark Connect Literal Handling (Review)",
+        severity="LOW",
+        introduced_in="17.3",
+        pattern=r"\b(array|map|struct)\s*\(",
+        file_types=[".py", ".scala"],
+        description="[Review] Spark Connect 17.3: null values preserved, decimal precision changed to (38,18)",
+        remediation="Handle nulls explicitly with coalesce(); specify decimal precision if needed"
+    ),
+    BreakingChangePattern(
+        id="BC-17.3-005",
+        name="Spark Connect Decimal Precision",
+        severity="LOW",
+        introduced_in="17.3",
+        pattern=r"DecimalType\s*\(|\.cast\s*\(\s*[\"']decimal",
+        file_types=[".py", ".scala"],
+        description="[Review] Spark Connect: decimal precision in array/map literals defaults to (38,18)",
+        remediation="Specify explicit precision/scale if plan comparison or exact precision required"
+    ),
+    BreakingChangePattern(
         id="BC-SC-003",
         name="UDF Definition (Review)",
         severity="LOW",
@@ -293,7 +480,7 @@ BREAKING_PATTERNS = [
         pattern=r"@udf\s*\(",
         file_types=[".py"],
         description="[Review] Spark Connect: UDFs serialize at execution time",
-        remediation="Check if external variables are captured correctly"
+        remediation="Check if external variables are captured correctly; use function factory pattern"
     ),
     BreakingChangePattern(
         id="BC-SC-004",
@@ -304,6 +491,16 @@ BREAKING_PATTERNS = [
         file_types=[".py"],
         description="[Review] Spark Connect: schema access triggers RPC",
         remediation="Cache df.columns/df.schema if accessed multiple times"
+    ),
+    BreakingChangePattern(
+        id="BC-15.4-005",
+        name="JDBC Read (Review)",
+        severity="LOW",
+        introduced_in="15.4",
+        pattern=r"\.jdbc\s*\(|\.format\s*\(\s*[\"']jdbc[\"']\s*\)",
+        file_types=[".py", ".scala"],
+        description="[Review] JDBC timestamp handling changed - useNullCalendar default now true",
+        remediation="Test timestamp values from JDBC sources; set useNullCalendar=false if issues"
     ),
 ]
 

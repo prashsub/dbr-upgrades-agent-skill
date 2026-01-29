@@ -2,14 +2,14 @@
 # MAGIC %md
 # MAGIC # DBR Migration Test Notebook
 # MAGIC 
-# MAGIC **Purpose:** A compact notebook with ALL 17 breaking changes for testing the Agent Skill.
+# MAGIC **Purpose:** A compact notebook with key breaking change patterns for testing the Agent Skill (covers most common patterns from the 35 detected by the profiler).
 # MAGIC 
 # MAGIC ## Breaking Changes Summary
 # MAGIC 
-# MAGIC | Category | Count | IDs |
-# MAGIC |----------|-------|-----|
-# MAGIC | 🔴 Auto-Fix | 7 | BC-17.3-001, BC-15.4-003, BC-16.4-001a-e |
-# MAGIC | 🟡 Manual Review | 6 | BC-15.4-001, BC-15.4-004, BC-SC-001/002/003/004 |
+# MAGIC | Category | Examples | IDs Included |
+# MAGIC |----------|----------|--------------|
+# MAGIC | 🔴 Auto-Fix | 10 | BC-17.3-001, BC-15.4-003, BC-16.4-001a-i |
+# MAGIC | 🟡 Manual Review | 8 | BC-13.3-001/003, BC-15.4-001/004, BC-SC-001/003/004 |
 # MAGIC | ⚙️ Config | 4 | BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-17.3-002 |
 # MAGIC 
 # MAGIC ## Usage
@@ -35,31 +35,42 @@ import os
 # Add utils to path for imports
 sys.path.append(os.path.join(os.getcwd(), 'utils'))
 
-# Import test helpers from utils module
-from utils.dbr_test_helpers import (
-    generate_test_data,
-    create_breaking_change_sample,
-    get_dbr_version,
-    is_breaking_change_applicable,
-    BreakingChangeTestResult,
-    get_legacy_config_settings,
-    generate_test_report
-)
+# Import test helpers from utils module (optional - notebook works without them)
+HELPERS_AVAILABLE = False
+try:
+    from utils.dbr_test_helpers import (
+        generate_test_data,
+        create_breaking_change_sample,
+        get_dbr_version,
+        is_breaking_change_applicable,
+        BreakingChangeTestResult,
+        get_legacy_config_settings,
+        generate_test_report
+    )
+    HELPERS_AVAILABLE = True
+except ImportError:
+    print("⚠️ utils.dbr_test_helpers not found - helper sections will be skipped")
+    print("   The core breaking change examples will still work.")
 
 # BC-17.3-001: This import will FAIL on DBR 17.3
 from pyspark.sql.functions import input_file_name
 
 # Display DBR version information
-version_info = get_dbr_version(spark)
-print("=" * 60)
-print("DBR VERSION INFORMATION")
-print("=" * 60)
-print(f"DBR Version: {version_info['dbr_version']}")
-print(f"Full Version: {version_info['dbr_full']}")
-print(f"Spark Version: {version_info['spark_version']}")
-print(f"Is LTS: {version_info['is_lts']}")
-print("=" * 60)
-print()
+if HELPERS_AVAILABLE:
+    version_info = get_dbr_version(spark)
+    print("=" * 60)
+    print("DBR VERSION INFORMATION")
+    print("=" * 60)
+    print(f"DBR Version: {version_info['dbr_version']}")
+    print(f"Full Version: {version_info['dbr_full']}")
+    print(f"Spark Version: {version_info['spark_version']}")
+    print(f"Is LTS: {version_info['is_lts']}")
+    print("=" * 60)
+    print()
+else:
+    print("=" * 60)
+    print("DBR VERSION: Run on Databricks to see version info")
+    print("=" * 60)
 
 # Load NYC Taxi dataset
 taxi_df = (spark.read.format("delta")
@@ -162,7 +173,34 @@ val numbers = Stream.from(1)
 val randoms = Stream.continually(scala.util.Random.nextInt())
 """
 
-print("Scala 2.13 breaking patterns defined")
+# BC-16.4-001f: .toIterator (Scala)
+scala_1f = """
+val iter = myList.toIterator
+"""
+
+# BC-16.4-001g: .view.force (Scala)
+scala_1g = """
+val result = myList.view.map(_ * 2).force
+"""
+
+# BC-16.4-001h: collection.Seq (Scala)
+scala_1h = """
+import scala.collection.Seq
+val mySeq: Seq[Int] = ???
+"""
+
+# BC-16.4-001i: Symbol literals (Scala)
+scala_1i = """
+val sym = 'mySymbol
+"""
+
+# BC-16.4-002: HashMap ordering (Scala)
+scala_2 = """
+val map = HashMap("a" -> 1, "b" -> 2)
+map.foreach { case (k, v) => println(s"$k: $v") }  // Order may differ!
+"""
+
+print("Scala 2.13 breaking patterns defined (10 total)")
 
 # COMMAND ----------
 
@@ -177,15 +215,37 @@ print("Scala 2.13 breaking patterns defined")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### BC-15.4-001: VARIANT in Python UDF (15.4 only - fixed in 16.4+)
+# MAGIC ### BC-13.3-001: MERGE INTO Type Casting (ANSI Mode)
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC -- =============================================================================
+# MAGIC -- BC-13.3-001: [MANUAL REVIEW] MERGE INTO Type Casting
+# MAGIC -- ANSI mode now throws CAST_OVERFLOW instead of storing NULL
+# MAGIC --
+# MAGIC -- REVIEW: Check for type mismatches between source and target columns
+# MAGIC -- FIX: Add explicit CAST with bounds checking
+# MAGIC -- =============================================================================
+# MAGIC 
+# MAGIC -- Example MERGE that could overflow (BIGINT → INT):
+# MAGIC -- MERGE INTO target AS t USING source AS s ON t.id = s.id
+# MAGIC -- WHEN MATCHED THEN UPDATE SET t.int_col = s.bigint_col;  -- May overflow!
+# MAGIC 
+# MAGIC SELECT 'BC-13.3-001: Review MERGE INTO for type casting' as guidance;
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### BC-15.4-001: VARIANT in Python UDF
 
 # COMMAND ----------
 
 # =============================================================================
 # BC-15.4-001: [MANUAL REVIEW] VARIANT UDF
-# FAILS on DBR 15.4 only, works on 16.4+
+# May throw exception in DBR 15.4+
 # 
-# REVIEW: If target is 15.4, use StringType + json.dumps instead
+# REVIEW: Consider using StringType + JSON serialization instead
 # FIX: @udf(returnType=StringType()) + return json.dumps({...})
 # =============================================================================
 @udf(returnType=VariantType())
@@ -247,27 +307,33 @@ risky_transform()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### BC-SC-002: Temp View Name Reuse
+# MAGIC ### BC-13.3-003: overwriteSchema + Dynamic Partition
 
 # COMMAND ----------
 
 # =============================================================================
-# BC-SC-002: [MANUAL REVIEW] Temp View Name Reuse (Spark Connect)
-# Same view name used multiple times - in Spark Connect, all DFs see latest data
+# BC-13.3-003: [MANUAL REVIEW] overwriteSchema + Dynamic Partition
+# Cannot combine overwriteSchema=true with dynamic partition overwrites
 #
-# REVIEW: Check if temp view names are reused in loops or repeated function calls
-# FIX: Use unique names with UUID: f"batch_{name}_{uuid.uuid4().hex[:8]}"
+# REVIEW: Check for writes using both overwriteSchema and partitionOverwriteMode
+# FIX: Separate schema evolution from partition overwrites into distinct operations
 # =============================================================================
-def process_data(size, name):
-    df = spark.range(size).withColumn("batch", lit(name))
-    df.createOrReplaceTempView("current_batch")  # Same name every time - PROBLEM!
-    return spark.table("current_batch")
+overwrite_schema_example = """
+# ❌ This will FAIL in DBR 13.3+:
+# spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
+# df.write.mode("overwrite").option("overwriteSchema", "true").partitionBy("date").save(path)
 
-batch_a = process_data(100, "morning")
-batch_b = process_data(50, "evening")
+# ✅ FIX: Separate operations
+# Step 1: Evolve schema first
+# spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
+# df_sample.write.format("delta").mode("append").save(path)
 
-# In Spark Connect: both show 50 rows!
-print(f"Batch A: {batch_a.count()}, Batch B: {batch_b.count()}")
+# Step 2: Then do partition overwrites
+# spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
+# df.write.mode("overwrite").partitionBy("date").save(path)
+"""
+print("BC-13.3-003: overwriteSchema + dynamic partition")
+print(overwrite_schema_example)
 
 # COMMAND ----------
 
@@ -434,10 +500,15 @@ print(auto_loader_code)
 # MAGIC | BC-16.4-001c | 🔴 Auto-Fix | `TraversableOnce` | **FIX** → `IterableOnce` |
 # MAGIC | BC-16.4-001d | 🔴 Auto-Fix | `Traversable` | **FIX** → `Iterable` |
 # MAGIC | BC-16.4-001e | 🔴 Auto-Fix | `Stream.from()` | **FIX** → `LazyList.from()` |
-# MAGIC | BC-15.4-001 | 🟡 Manual | `VariantType()` UDF | **FLAG** - Skip if target ≥16.4 |
+# MAGIC | BC-16.4-001f | 🔴 Auto-Fix | `.toIterator` | **FIX** → `.iterator` |
+# MAGIC | BC-16.4-001g | 🔴 Auto-Fix | `.view.force` | **FIX** → `.view.to(List)` |
+# MAGIC | BC-16.4-001i | 🔴 Auto-Fix | `'symbol` literal | **FIX** → `Symbol("symbol")` |
+# MAGIC | BC-13.3-001 | 🟡 Manual | MERGE INTO | **FLAG** - Review type casting |
+# MAGIC | BC-15.4-001 | 🟡 Manual | `VariantType()` UDF | **FLAG** - Use StringType + JSON |
 # MAGIC | BC-15.4-004 | 🟡 Manual | VIEW column types | **FLAG** - Remove types, cast in SELECT |
+# MAGIC | BC-16.4-002 | 🟡 Manual | HashMap/HashSet | **FLAG** - Don't rely on order |
+# MAGIC | BC-16.4-001h | 🟡 Manual | `collection.Seq` | **FLAG** - Use explicit type |
 # MAGIC | BC-SC-001 | 🟡 Manual | Lazy schema analysis | **FLAG** - Add `df.columns` for validation |
-# MAGIC | BC-SC-002 | 🟡 Manual | Temp view reuse | **FLAG** - Add UUID to view names |
 # MAGIC | BC-SC-003 | 🟡 Manual | UDF late binding | **FLAG** - Use function factory pattern |
 # MAGIC | BC-SC-004 | 🟡 Manual | Schema in loop | **FLAG** - Cache columns outside loop |
 # MAGIC | BC-13.3-002 | ⚙️ Config | Parquet timestamp | **FLAG** - Test timestamps first |
@@ -466,25 +537,31 @@ print(auto_loader_code)
 # COMMAND ----------
 
 # Check applicability of each breaking change
-bc_ids = [
-    "BC-17.3-001", "BC-15.4-003", "BC-15.4-001", "BC-15.4-004",
-    "BC-SC-001", "BC-SC-002", "BC-SC-003", "BC-SC-004",
-    "BC-13.3-002", "BC-15.4-002", "BC-16.4-004", "BC-17.3-002",
-    "BC-16.4-001a"
-]
+if HELPERS_AVAILABLE:
+    bc_ids = [
+        "BC-17.3-001", "BC-15.4-003", "BC-15.4-001", "BC-15.4-004",
+        "BC-SC-001", "BC-SC-003", "BC-SC-004",
+        "BC-13.3-001", "BC-13.3-002", "BC-13.3-003",
+        "BC-15.4-002", "BC-16.4-002", "BC-16.4-004", 
+        "BC-17.3-002",
+        "BC-16.4-001a", "BC-16.4-001f", "BC-16.4-001i"
+    ]
 
-print("=" * 70)
-print("BREAKING CHANGE APPLICABILITY")
-print("=" * 70)
-print()
-
-for bc_id in bc_ids:
-    applicable = is_breaking_change_applicable(spark, bc_id)
-    bc_sample = create_breaking_change_sample(spark, bc_id)
-    status = "✅ APPLIES" if applicable else "❌ N/A"
-    print(f"{status} | {bc_id}: {bc_sample.get('description', 'Unknown')}")
-    print(f"         Severity: {bc_sample.get('severity', 'UNKNOWN')}")
+    print("=" * 70)
+    print("BREAKING CHANGE APPLICABILITY")
+    print("=" * 70)
     print()
+
+    for bc_id in bc_ids:
+        applicable = is_breaking_change_applicable(spark, bc_id)
+        bc_sample = create_breaking_change_sample(spark, bc_id)
+        status = "✅ APPLIES" if applicable else "❌ N/A"
+        print(f"{status} | {bc_id}: {bc_sample.get('description', 'Unknown')}")
+        print(f"         Severity: {bc_sample.get('severity', 'UNKNOWN')}")
+        print()
+else:
+    print("⚠️ Helper module not available - skipping applicability check")
+    print("   Run on Databricks with utils/dbr_test_helpers.py to see this section")
 
 # COMMAND ----------
 
@@ -494,17 +571,20 @@ for bc_id in bc_ids:
 # COMMAND ----------
 
 # Generate test data using helper function
-test_df = generate_test_data(spark, num_rows=50)
-print("Generated test data:")
-test_df.show(5)
+if HELPERS_AVAILABLE:
+    test_df = generate_test_data(spark, num_rows=50)
+    print("Generated test data:")
+    test_df.show(5)
 
-# Validate schema using helper function
-from utils.dbr_test_helpers import validate_dataframe_schema
+    # Validate schema using helper function
+    from utils.dbr_test_helpers import validate_dataframe_schema
 
-expected_cols = ["id", "value", "category", "created_at"]
-is_valid, message = validate_dataframe_schema(test_df, expected_cols)
-print(f"\nSchema Validation: {'✅ PASSED' if is_valid else '❌ FAILED'}")
-print(f"Message: {message}")
+    expected_cols = ["id", "value", "category", "created_at"]
+    is_valid, message = validate_dataframe_schema(test_df, expected_cols)
+    print(f"\nSchema Validation: {'✅ PASSED' if is_valid else '❌ FAILED'}")
+    print(f"Message: {message}")
+else:
+    print("⚠️ Helper module not available - skipping test data generation")
 
 # COMMAND ----------
 
@@ -514,24 +594,27 @@ print(f"Message: {message}")
 # COMMAND ----------
 
 # Create sample test results for demonstration
-sample_results = [
-    BreakingChangeTestResult("BC-17.3-001", "input_file_name() removed"),
-    BreakingChangeTestResult("BC-15.4-003", "! syntax for NOT disallowed"),
-    BreakingChangeTestResult("BC-SC-002", "Temp view name reuse")
-]
+if HELPERS_AVAILABLE:
+    sample_results = [
+        BreakingChangeTestResult("BC-17.3-001", "input_file_name() removed"),
+        BreakingChangeTestResult("BC-15.4-003", "! syntax for NOT disallowed"),
+        BreakingChangeTestResult("BC-13.3-001", "MERGE INTO type casting")
+    ]
 
-# Simulate test results
-sample_results[0].add_test_result(True, "Successfully replaced with _metadata.file_name")
-sample_results[0].add_test_result(True, "All imports updated")
+    # Simulate test results
+    sample_results[0].add_test_result(True, "Successfully replaced with _metadata.file_name")
+    sample_results[0].add_test_result(True, "All imports updated")
 
-sample_results[1].add_test_result(True, "Replaced ! with NOT in SQL")
-sample_results[1].add_test_result(False, "Found additional ! usage in line 123")
+    sample_results[1].add_test_result(True, "Replaced ! with NOT in SQL")
+    sample_results[1].add_test_result(False, "Found additional ! usage in line 123")
 
-sample_results[2].add_test_result(False, "Duplicate temp view name detected")
+    sample_results[2].add_test_result(False, "Potential type overflow in MERGE statement")
 
-# Generate and display report
-report = generate_test_report(sample_results)
-print(report)
+    # Generate and display report
+    report = generate_test_report(sample_results)
+    print(report)
+else:
+    print("⚠️ Helper module not available - skipping test results demo")
 
 # COMMAND ----------
 
@@ -541,21 +624,31 @@ print(report)
 # COMMAND ----------
 
 # Display recommended legacy configurations
-configs = get_legacy_config_settings()
+if HELPERS_AVAILABLE:
+    configs = get_legacy_config_settings()
 
-print("=" * 70)
-print("RECOMMENDED LEGACY CONFIGURATIONS")
-print("=" * 70)
-print()
-print("Add these to your cluster/notebook if timestamps or MERGE behave differently:")
-print()
-for key, value in configs.items():
-    print(f"  {key} = {value}")
-print()
-print("To apply these configs, uncomment and run:")
-print("# from utils.dbr_test_helpers import apply_legacy_configs")
-print("# result = apply_legacy_configs(spark)")
-print("# print(result)")
+    print("=" * 70)
+    print("RECOMMENDED LEGACY CONFIGURATIONS")
+    print("=" * 70)
+    print()
+    print("Add these to your cluster/notebook if timestamps or MERGE behave differently:")
+    print()
+    for key, value in configs.items():
+        print(f"  {key} = {value}")
+    print()
+    print("To apply these configs, uncomment and run:")
+    print("# from utils.dbr_test_helpers import apply_legacy_configs")
+    print("# result = apply_legacy_configs(spark)")
+    print("# print(result)")
+else:
+    print("=" * 70)
+    print("RECOMMENDED LEGACY CONFIGURATIONS")
+    print("=" * 70)
+    print()
+    print("Common configs if you encounter issues after upgrade:")
+    print('  spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")')
+    print('  spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")')
+    print('  spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")')
 
 # COMMAND ----------
 

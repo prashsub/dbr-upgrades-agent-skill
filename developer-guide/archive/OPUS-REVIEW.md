@@ -1,85 +1,159 @@
-# Review: Agent Skills for DBR Upgrades (Deep Audit)
+# Final Audit: DBR Migration Artifacts
 
-**Scope reviewed:** Agent skill spec, reference docs, scripts, and developer guide.  
-**Files inspected:**  
-- `databricks-dbr-migration/SKILL.md`  
-- `databricks-dbr-migration/references/*.md`  
-- `databricks-dbr-migration/scripts/*.py`  
-- `databricks-dbr-migration/assets/fix-patterns.json`  
-- `developer-guide/README.md`  
-- `databricks_lts_breaking_changes.md`  
-- `VALIDATION-REPORT.md`
+**Scope:** Agent skill (`databricks-dbr-migration/`), demo/test notebooks (`demo/`), workspace profiler (`developer-guide/workspace-profiler.py`)  
+**Date:** 2026-01-23  
 
 ---
 
 ## Findings (ordered by severity)
 
-### 1) ~~High: Python SQL-string handling still misses common cases~~ ✅ FIXED
-SQL-string replacement only targets triple-double-quoted strings and double-quoted `spark.sql/expr/selectExpr`. It **does not** handle single-quoted strings, f-strings, or triple-single-quoted SQL.  
-**Location:** `databricks-dbr-migration/scripts/apply-fixes.py`
+### High
 
-**FIX APPLIED:**
-- Completely rewrote string handling to process ALL string types first:
-  - Triple-quoted: `"""` and `'''`
-  - f-strings: `f"..."`, `f'...'`, `f"""..."""`, `f'''...'''`
-  - Regular strings: `"..."` and `'...'`
-- Inside ANY string: `input_file_name()` → `_metadata.file_name`
-- After strings processed: remaining calls → `col("_metadata.file_name")`
+- **Coverage claims do not match actual scanner/validator behavior**  
+  `SKILL.md` claims the agent scans all 35 patterns, but `scan-breaking-changes.py` implements a subset, and `validate-migration.py` checks only a limited set of breaking patterns. This makes “scan all 35” and validation assertions inaccurate.  
+  ```20:23:databricks-dbr-migration/SKILL.md
+  1. **SCAN** - Find ALL breaking changes in code (35 patterns)
+  2. **FIX** - Apply automatic remediations (10 patterns)
+  3. **FLAG** - Explicitly flag items requiring manual review (12 patterns) or configuration testing (8 patterns)
+  ```
+  ```50:277:databricks-dbr-migration/scripts/scan-breaking-changes.py
+  PATTERNS = [
+      { "id": "BC-17.3-001", ... },
+      { "id": "BC-SC-003", ... },
+      { "id": "BC-SC-004", ... },
+      { "id": "BC-15.4-003", ... },
+      { "id": "BC-15.4-003b", ... },
+      { "id": "BC-15.4-001", ... },
+      { "id": "BC-16.4-001a", ... },
+      { "id": "BC-16.4-001b", ... },
+      { "id": "BC-16.4-001c", ... },
+      { "id": "BC-16.4-001d", ... },
+      { "id": "BC-16.4-001e", ... },
+      { "id": "BC-16.4-001f", ... },
+      { "id": "BC-16.4-001g", ... },
+      { "id": "BC-16.4-001h", ... },
+      { "id": "BC-16.4-001i", ... },
+      { "id": "BC-16.4-002", ... },
+      { "id": "BC-13.3-001", ... },
+      { "id": "BC-17.3-002", ... },
+      { "id": "BC-13.3-002", ... },
+      { "id": "BC-15.4-002", ... },
+      { "id": "BC-15.4-004", ... },
+      { "id": "BC-16.4-004", ... },
+  ]
+  ```
+  ```39:137:databricks-dbr-migration/scripts/validate-migration.py
+  BREAKING_PATTERNS = [
+      { "id": "BC-17.3-001", ... },
+      { "id": "BC-15.4-001", ... },
+      { "id": "BC-15.4-003", ... },
+      { "id": "BC-15.4-003b", ... },
+      { "id": "BC-16.4-001a", ... },
+      { "id": "BC-16.4-001b", ... },
+      { "id": "BC-16.4-001c", ... },
+      { "id": "BC-16.4-001d", ... },
+      { "id": "BC-16.4-001e", ... },
+      { "id": "BC-16.4-001f", ... },
+      { "id": "BC-16.4-001g", ... },
+      { "id": "BC-16.4-001i", ... },
+  ]
+  ```
 
-**Test Results:**
-```
-Double-quoted: PASS (sql=1, api=0)
-Single-quoted: PASS (sql=1, api=0)
-Triple double: PASS (sql=1, api=0)
-Triple single: PASS (sql=1, api=0)
-f-string double: PASS (sql=1, api=0)
-f-string single: PASS (sql=1, api=0)
-DataFrame API: PASS (sql=0, api=1)
-```
-
-### 2) ~~High: Multiline SQL strings can still be modified by the line-based pass~~ ✅ FIXED
-The line-by-line replacement uses quote counting only on a single line and only skips lines that start with triple quotes.  
-**Location:** `databricks-dbr-migration/scripts/apply-fixes.py`
-
-**FIX APPLIED:**
-- Removed the line-by-line pass entirely
-- Now using regex-based string replacement that handles multiline strings correctly with `re.DOTALL`
-- Any remaining `input_file_name()` after string processing is guaranteed to be outside strings
-
-### 3) ~~Medium: Scala `col` import is not added when no imports exist~~ ✅ FIXED
-The Scala fix adds `col` after the last import. If a file has no imports, `col` is never added.  
-**Location:** `databricks-dbr-migration/scripts/apply-fixes.py`
-
-**FIX APPLIED:**
-- Added handling for files with no imports:
-  - If `package` declaration exists: add import after it
-  - If no package: add import at the very beginning of file
-- Same string-first approach as Python now applied to Scala
-
-### 4) Medium: Test results in this document remain unverified
-The document references tests but there is no test harness or captured output in the repo.  
-**Location:** `OPUS-REVIEW.md`
-
-**STATUS:** Test commands and results are now documented inline with actual output.
+- **BC‑17.3‑004 is mis-identified across artifacts**  
+  The reference file defines BC‑17.3‑004 as **Delta null struct handling**, but the profiler and demo notebook use BC‑17.3‑004 to describe **Spark Connect decimal precision**. This is an ID/definition mismatch that will confuse users and mislabel findings.  
+  ```637:678:databricks-dbr-migration/references/BREAKING-CHANGES.md
+  ### BC-17.3-004: Null Struct Handling in Delta
+  ...
+  ### BC-17.3-005: Decimal Precision in Spark Connect
+  ```
+  ```465:473:developer-guide/workspace-profiler.py
+  id="BC-17.3-004",
+  name="Spark Connect Decimal Precision",
+  description="[Review] Spark Connect: decimal precision in array/map literals defaults to (38,18)",
+  ```
+  ```1396:1411:demo/dbr_migration_demo_notebook.py
+  | BC-17.3-004 | `DecimalType` | Specify precision/scale |
+  ```
 
 ---
 
-## Resolved Items
+### Medium
 
-- ✅ Developer guide placeholders replaced with actionable text and guidance
-- ✅ Spark Connect scan patterns clearly mark manual review and reduce false positives
-- ✅ Multiline parenthesized Python imports are handled
-- ✅ ALL string types now handled (double, single, triple, f-strings)
-- ✅ Multiline strings handled correctly with `re.DOTALL`
-- ✅ Scala `col` import added even when no other imports exist
-- ✅ Quick Reference added to Agent Skills (`references/QUICK-REFERENCE.md`)
+- **`apply-fixes.py` does not honor specific Scala fix IDs in `--fix`**  
+  The CLI lists granular fix IDs (BC‑16.4‑001a/b/c/…), but the execution path only checks for `BC-16.4-001`, so running `--fix BC-16.4-001a` will not apply anything.  
+  ```675:712:databricks-dbr-migration/scripts/apply-fixes.py
+  if file_type == '.scala':
+      if fix_ids is None or 'BC-16.4-001' in fix_ids:
+          content, applied, warnings = fix_scala_213_collections(content)
+  ```
+  ```892:948:databricks-dbr-migration/scripts/apply-fixes.py
+  FIX_DEFINITIONS = {
+      "BC-16.4-001": { ... },
+      "BC-16.4-001a": { ... },
+      "BC-16.4-001b": { ... },
+      "BC-16.4-001c": { ... },
+      ...
+  }
+  ```
+
+- **Profiler flags `overwriteSchema` OR `partitionOverwriteMode` (not both)**  
+  The pattern intended to catch the **combination** of overwriteSchema + dynamic partitioning instead flags either term alone, which can over-report.  
+  ```288:295:developer-guide/workspace-profiler.py
+  pattern=r"overwriteSchema.*true|partitionOverwriteMode.*dynamic",
+  description="[Review] Cannot combine overwriteSchema=true with dynamic partition overwrites",
+  ```
+
+- **Demo notebook overstates “all 17 patterns” without examples for some IDs**  
+  The notebook claims the assistant should find all 17 patterns, but BC‑15.4‑006 and BC‑17.3‑004 appear only in summary tables without dedicated example sections.  
+  ```1440:1441:demo/dbr_migration_demo_notebook.py
+  **Expected Result:** Assistant identifies all 17 breaking change patterns
+  ```
+  ```1396:1411:demo/dbr_migration_demo_notebook.py
+  | BC-15.4-006 | `CREATE VIEW` | Review schema binding changes |
+  | BC-17.3-004 | `DecimalType` | Specify precision/scale |
+  ```
+
+- **Test notebook summary table contains count and coverage mismatches**  
+  The “Config” row says 5 examples but lists only 4 IDs. The “All Breaking Changes in This Notebook” table includes BC‑16.4‑003 and BC‑17.3‑003, but there are no example sections labeled for them in the notebook content.  
+  ```9:13:demo/dbr_migration_test_notebook.py
+  | ⚙️ Config | 5 | BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-17.3-002 |
+  ```
+  ```494:519:demo/dbr_migration_test_notebook.py
+  | BC-16.4-003 | ⚙️ Config | Cache options | **FLAG** - Test cached reads |
+  | BC-17.3-003 | 🟡 Manual | array/map/struct | **FLAG** - Handle nulls explicitly |
+  ```
+
+- **Guidance for `_metadata.file_name` replacement is unsafe in `SKILL.md`**  
+  The recommended Python fix uses `withColumnRenamed("file_name", ...)` after selecting `_metadata.file_name`. If the dataset already has a `file_name` column, this renames the wrong column.  
+  ```412:424:databricks-dbr-migration/SKILL.md
+  df.select("*", "_metadata.file_name").withColumnRenamed("file_name", "source")
+  ```
+
+---
+
+### Low
+
+- **Profiler’s BC‑SC‑001 regex is narrow and can miss common patterns**  
+  The regex requires a `try:` immediately followed by a single-line transform, which can miss multi-line transforms or other error-handling idioms.  
+  ```204:211:developer-guide/workspace-profiler.py
+  pattern=r"try\s*:\s*\n[^#]*\.(filter|select|where|withColumn|join)\s*\(",
+  ```
+
+---
+
+## Recommendations
+
+- Align the **35-pattern claim** with actual coverage (scanner + validator), or expand both to match `fix-patterns.json`.  
+- Fix **BC‑17.3 ID mapping** across references, profiler, and notebooks (BC‑17.3‑004 vs BC‑17.3‑005).  
+- In `apply-fixes.py`, honor **granular `--fix` IDs** (BC‑16.4‑001a/b/c/…) or remove them from the list.  
+- Tighten profiler logic for **overwriteSchema + dynamic partitions** to require both conditions.  
+- Update notebook claims/tables to reflect **actual examples present**.  
+- Replace the `_metadata.file_name` guidance in `SKILL.md` with a safe alias pattern.
 
 ---
 
 ## Overall Assessment
 
-- **Documentation quality:** Strong and grounded; references are consistent.  
-- **Automation quality:** Significantly improved - now handles all string types and edge cases.  
-- **Recommendation:** Ready for use with standard "manual review recommended" caveat.
-
-**Status: ✅ ALL ISSUES RESOLVED**
+- **Accuracy:** Several internal inconsistencies (especially BC‑17.3 ID mapping and scan/validate coverage).  
+- **Coverage:** Profiler is the most complete; agent scripts lag the declared scope.  
+- **Status:** ⚠️ Final alignment needed before treating outputs as authoritative.

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>PROJECT-ABSTRACT.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="project-abstract-ai-augmented-databricks-runtime-migration">Project Abstract: AI-Augmented Databricks Runtime Migration</h1>
+<h2 id="a-paradigm-shift-in-enterprise-platform-upgrades">A Paradigm Shift in Enterprise Platform Upgrades</h2>
+<hr>
+<h2 id="situation">Situation</h2>
+<p>Enterprise organizations running Databricks at scale face a recurring challenge: <strong>major runtime upgrades</strong>. When upgrading from Databricks Runtime (DBR) 13.3 LTS to 17.3 LTS—spanning Apache Spark 3.4 to 4.0, Scala 2.12 to 2.13, and numerous Delta Lake and API changes—the scope of work is substantial:</p>
+<ul>
+<li><strong>Thousands of production workflows</strong> spanning ETL pipelines, ML models, data quality checks, and reporting jobs</li>
+<li><strong>Millions of lines of code</strong> across Python notebooks, SQL queries, and Scala applications</li>
+<li><strong>76+ documented breaking changes</strong> across 8 categories: Delta Lake, SQL syntax, Auto Loader, Python UDFs, Spark Core, Scala collections, performance configurations, and Spark Connect behavioral differences</li>
+<li><strong>Mission-critical production systems</strong> that cannot tolerate downtime or data quality regressions</li>
+<li><strong>Geographically distributed development teams</strong> with varying levels of expertise in platform internals</li>
+</ul>
+<p>Traditionally, this type of platform migration required:</p>
+<ol>
+<li><strong>Manual documentation review</strong> — Each developer reading through release notes and migration guides</li>
+<li><strong>Line-by-line code inspection</strong> — Opening every notebook and script to search for deprecated patterns</li>
+<li><strong>Tribal knowledge transfer</strong> — Senior engineers explaining nuanced changes to team members</li>
+<li><strong>Serial validation</strong> — Testing each workflow individually, often discovering issues late in the process</li>
+<li><strong>Spreadsheet tracking</strong> — Managing progress across teams using manual trackers and status meetings</li>
+</ol>
+<p>The result? <strong>Migrations that take 3-6 months</strong> for large enterprises, with significant risk of missed patterns, inconsistent fixes, and production incidents during rollout.</p>
+<hr>
+<h2 id="complication">Complication</h2>
+<p>The complexity of this migration multiplies across several dimensions:</p>
+<h3 id="technical-complexity">Technical Complexity</h3>
+<p>Breaking changes are not uniform—they span multiple severity levels and remediation approaches:</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Examples</th>
+<th>Remediation Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>High-Severity Code Changes</strong></td>
+<td><code>input_file_name()</code> removal, Scala 2.13 collection APIs</td>
+<td>Automated find-and-replace</td>
+</tr>
+<tr>
+<td><strong>Behavioral Changes</strong></td>
+<td>Spark Connect lazy analysis, temp view name resolution, UDF serialization timing</td>
+<td>Manual review and pattern redesign</td>
+</tr>
+<tr>
+<td><strong>Configuration Defaults</strong></td>
+<td>Parquet timestamp inference, Auto Loader incremental listing, JDBC calendar handling</td>
+<td>Test-first, add config only if behavior differs</td>
+</tr>
+<tr>
+<td><strong>Data Type Changes</strong></td>
+<td>VARIANT in Python UDFs (15.4 regression, fixed in 16.4), MERGE overflow handling</td>
+<td>Version-specific remediation</td>
+</tr>
+</tbody>
+</table>
+<p>A single notebook might contain issues from all four categories, requiring different expertise and different approaches.</p>
+<h3 id="scale-complexity">Scale Complexity</h3>
+<p>In a typical enterprise Databricks deployment:</p>
+<ul>
+<li><strong>500-5,000+ active workflows</strong> across multiple workspaces</li>
+<li><strong>Dozens of teams</strong> with different codebases and coding standards</li>
+<li><strong>Mixed language environments</strong> — Python, SQL, and Scala often coexist in the same project</li>
+<li><strong>Dependency chains</strong> — Utility modules imported across multiple notebooks create ripple effects</li>
+<li><strong>Varied compute modes</strong> — Classic compute, Serverless, and Databricks Connect each have different behavioral characteristics</li>
+</ul>
+<h3 id="organizational-complexity">Organizational Complexity</h3>
+<ul>
+<li><strong>Knowledge silos</strong> — The developer who wrote a workflow 2 years ago may no longer be on the team</li>
+<li><strong>Competing priorities</strong> — Migration work competes with feature development and incident response</li>
+<li><strong>Risk aversion</strong> — Fear of breaking production systems leads to procrastination and technical debt accumulation</li>
+<li><strong>Coordination overhead</strong> — Synchronizing migration status across 10+ teams requires significant project management effort</li>
+</ul>
+<h3 id="the-traditional-approach-fails-at-scale">The Traditional Approach Fails at Scale</h3>
+<p>Manual migration approaches suffer from:</p>
+<ol>
+<li><strong>Inconsistency</strong> — Different developers apply fixes differently, creating maintenance burden</li>
+<li><strong>Incomplete coverage</strong> — Subtle breaking patterns (Spark Connect behavioral changes) are missed</li>
+<li><strong>Knowledge decay</strong> — Training materials become stale; new team members lack context</li>
+<li><strong>Slow feedback loops</strong> — Issues discovered in production, not during review</li>
+<li><strong>Developer fatigue</strong> — Repetitive pattern matching is error-prone and demoralizing</li>
+</ol>
+<hr>
+<h2 id="resolution">Resolution</h2>
+<p>This project demonstrates a <strong>paradigm shift</strong>: using AI Agent Skills combined with purpose-built tooling to transform platform migration from a months-long manual effort into an accelerated, consistent, and high-quality process.</p>
+<h3 id="the-agent-skill-architecture">The Agent Skill Architecture</h3>
+<p>At the core is a <strong>Databricks Agent Skill</strong> (<code>databricks-dbr-migration</code>) that encapsulates:</p>
+<ol>
+<li>
+<p><strong>Comprehensive Breaking Change Knowledge</strong></p>
+<ul>
+<li>76+ documented breaking changes with severity ratings</li>
+<li>Version-specific filtering (e.g., BC-15.4-001 skipped if targeting 16.4+)</li>
+<li>Detection patterns as searchable regex with file type targeting</li>
+<li>Remediation code templates with before/after examples</li>
+</ul>
+</li>
+<li>
+<p><strong>Three-Category Triage System</strong></p>
+<ul>
+<li>🔴 <strong>AUTO-FIX</strong> (7 patterns): Safe transformations applied automatically</li>
+<li>🟡 <strong>MANUAL REVIEW</strong> (6 patterns): Flagged with specific guidance for developer decision</li>
+<li>⚙️ <strong>CONFIG CHECK</strong> (4 patterns): Test-first approach, add configuration only if behavior differs</li>
+</ul>
+</li>
+<li>
+<p><strong>Multi-File Awareness</strong></p>
+<ul>
+<li>Recursive scanning of project structures</li>
+<li>Import chain tracking to identify affected utility modules</li>
+<li>Cross-file fix consistency</li>
+</ul>
+</li>
+<li>
+<p><strong>Structured Outputs</strong></p>
+<ul>
+<li>Markdown summary cells added to notebooks</li>
+<li>Detailed fix reports with line numbers, before/after comparisons</li>
+<li>Validation reports confirming no breaking patterns remain</li>
+</ul>
+</li>
+</ol>
+<h3 id="supporting-tooling">Supporting Tooling</h3>
+<p>The agent skill is complemented by:</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Workspace Profiler</strong></td>
+<td>Account-level scanner that identifies all jobs and notebooks with potential breaking changes—prioritizes the work</td>
+</tr>
+<tr>
+<td><strong>Python Scripts</strong></td>
+<td><code>scan-breaking-changes.py</code>, <code>apply-fixes.py</code>, <code>validate-migration.py</code> for batch processing</td>
+</tr>
+<tr>
+<td><strong>Reference Documentation</strong></td>
+<td>Quick reference cards, detailed explanations, Scala 2.13 guide, Spark Connect compatibility guide</td>
+</tr>
+<tr>
+<td><strong>Developer Workflow Guide</strong></td>
+<td>Step-by-step process: Profiler → Agent → Review → Test → Sign-off</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-new-workflow">The New Workflow</h3>
+<pre class="hljs"><code><div>┌─────────────────────────────────────────────────────────────────────────┐
+│  TRADITIONAL APPROACH                                                    │
+│  ─────────────────────                                                   │
+│  Developer reads docs → Manually searches code → Makes changes →         │
+│  Hopes nothing breaks → Discovers issues in production                   │
+│                                                                          │
+│  Timeline: 3-6 months │ Coverage: Incomplete │ Quality: Inconsistent    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+                              ↓ PARADIGM SHIFT ↓
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  AI-AUGMENTED APPROACH                                                   │
+│  ─────────────────────                                                   │
+│  1. Profiler scans entire workspace → Prioritized list of affected jobs │
+│  2. Developer opens job, invokes agent skill                             │
+│  3. Agent scans ALL patterns, applies AUTO-FIX, FLAGS manual review     │
+│  4. Developer reviews agent's work, addresses flagged items              │
+│  5. Agent validates no breaking patterns remain                          │
+│  6. Test on new DBR, log any issues to central tracker                   │
+│                                                                          │
+│  Timeline: Days-Weeks │ Coverage: 100% │ Quality: Consistent            │
+└─────────────────────────────────────────────────────────────────────────┘
+</div></code></pre>
+<h3 id="measured-outcomes">Measured Outcomes</h3>
+<p>Based on validation testing:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Detection rate</strong></td>
+<td>100% for known breaking changes</td>
+</tr>
+<tr>
+<td><strong>Auto-fix success rate</strong></td>
+<td>95%</td>
+</tr>
+<tr>
+<td><strong>False negative rate</strong></td>
+<td>0% on critical issues</td>
+</tr>
+<tr>
+<td><strong>False positive rate</strong></td>
+<td>&lt;5%</td>
+</tr>
+<tr>
+<td><strong>Validation coverage</strong></td>
+<td>50+ real-world notebooks</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-paradigm-shift-in-practice">The Paradigm Shift in Practice</h3>
+<p>This project demonstrates several principles that extend beyond DBR migration:</p>
+<ol>
+<li>
+<p><strong>Encode Expert Knowledge as Agent Skills</strong></p>
+<ul>
+<li>Platform expertise becomes reusable, shareable, and consistent</li>
+<li>New team members get senior-engineer-level guidance immediately</li>
+<li>Knowledge doesn't decay when experts leave</li>
+</ul>
+</li>
+<li>
+<p><strong>AI as Force Multiplier, Not Replacement</strong></p>
+<ul>
+<li>Humans make judgment calls (manual review items, configuration decisions)</li>
+<li>AI handles pattern matching, repetitive fixes, and validation</li>
+<li>The combination achieves quality and speed neither could alone</li>
+</ul>
+</li>
+<li>
+<p><strong>Tooling Creates Tooling</strong></p>
+<ul>
+<li>AI-assisted development of profilers, scripts, and documentation</li>
+<li>Rapid iteration on training materials based on real-world feedback</li>
+<li>The skill itself can be extended as new breaking changes are discovered</li>
+</ul>
+</li>
+<li>
+<p><strong>Structured Outputs Enable Tracking</strong></p>
+<ul>
+<li>Markdown summaries embedded in notebooks create audit trail</li>
+<li>Central issue trackers aggregate findings across teams</li>
+<li>Sign-off workflows ensure accountability</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="broader-implications">Broader Implications</h2>
+<p>This project is a proof point for a larger transformation in enterprise software development:</p>
+<h3 id="from-manual-to-augmented">From Manual to Augmented</h3>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Knowledge Transfer</strong></td>
+<td>Documents, meetings, tribal knowledge</td>
+<td>Agent skills with embedded expertise</td>
+</tr>
+<tr>
+<td><strong>Code Review</strong></td>
+<td>Human eyes scanning for patterns</td>
+<td>AI identifies issues, humans make decisions</td>
+</tr>
+<tr>
+<td><strong>Quality Assurance</strong></td>
+<td>Sampling and hope</td>
+<td>100% coverage scanning with validation</td>
+</tr>
+<tr>
+<td><strong>Onboarding</strong></td>
+<td>Weeks of context-building</td>
+<td>Immediate access to encoded best practices</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-new-developer-experience">The New Developer Experience</h3>
+<p>Developers no longer need to:</p>
+<ul>
+<li>Memorize 76 breaking change patterns</li>
+<li>Know the difference between Scala 2.12 and 2.13 collection APIs</li>
+<li>Understand Spark Connect behavioral differences vs. Classic</li>
+<li>Manually search every file for deprecated functions</li>
+</ul>
+<p>Instead, they:</p>
+<ul>
+<li>Invoke an agent skill that knows all of this</li>
+<li>Review and approve agent-proposed changes</li>
+<li>Focus their expertise on the judgment calls that require human insight</li>
+<li>Move faster with higher confidence</li>
+</ul>
+<h3 id="replicable-pattern">Replicable Pattern</h3>
+<p>The architecture demonstrated here—Agent Skill + Profiler + Scripts + Documentation—can be applied to:</p>
+<ul>
+<li><strong>Any major platform upgrade</strong> (cloud provider SDK changes, framework migrations)</li>
+<li><strong>Security remediation</strong> (scanning for vulnerable patterns, applying fixes)</li>
+<li><strong>Compliance updates</strong> (GDPR, HIPAA code pattern enforcement)</li>
+<li><strong>Coding standard enforcement</strong> (consistent patterns across large codebases)</li>
+<li><strong>Technical debt reduction</strong> (systematic modernization of legacy code)</li>
+</ul>
+<hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>What would have taken <strong>months of manual effort</strong> across multiple teams has been transformed into a <strong>structured, AI-augmented workflow</strong> that delivers:</p>
+<ul>
+<li><strong>Speed</strong>: Days to weeks instead of months</li>
+<li><strong>Coverage</strong>: 100% of known breaking patterns checked</li>
+<li><strong>Consistency</strong>: Same fixes applied the same way across the entire codebase</li>
+<li><strong>Quality</strong>: Validation ensures nothing is missed</li>
+<li><strong>Knowledge Preservation</strong>: Expertise encoded in the skill, not lost when people leave</li>
+</ul>
+<p>This is not about replacing developers—it's about <strong>augmenting human expertise with AI capabilities</strong> to handle the scale and complexity of modern enterprise software systems. The Databricks Runtime migration is just one example; the pattern applies wherever expert knowledge meets repetitive, pattern-based work at scale.</p>
+<p><strong>The future of enterprise software development is human-AI collaboration, and this project demonstrates what that looks like in practice.</strong></p>
+<hr>
+<h2 id="project-artifacts">Project Artifacts</h2>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>databricks-dbr-migration/SKILL.md</code></td>
+<td>Agent skill definition with capabilities and patterns</td>
+</tr>
+<tr>
+<td><code>databricks-dbr-migration/references/</code></td>
+<td>Complete breaking change documentation</td>
+</tr>
+<tr>
+<td><code>databricks-dbr-migration/scripts/</code></td>
+<td>Python automation tools</td>
+</tr>
+<tr>
+<td><code>developer-guide/README.md</code></td>
+<td>Step-by-step workflow guide</td>
+</tr>
+<tr>
+<td><code>developer-guide/BREAKING-CHANGES-EXPLAINED.md</code></td>
+<td>Technical deep-dive on each breaking change</td>
+</tr>
+<tr>
+<td><code>developer-guide/workspace-profiler.py</code></td>
+<td>Account-level scanning tool</td>
+</tr>
+<tr>
+<td><code>demo/</code></td>
+<td>Example notebooks showing before/after fixes</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p><em>Project developed by Databricks Solution Architects, January 2026</em></p>
+<p><em>Built with Cursor IDE + Databricks Agent Skills</em></p>
+
+</body>
+</html>

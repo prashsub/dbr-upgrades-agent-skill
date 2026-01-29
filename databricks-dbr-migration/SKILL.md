@@ -17,11 +17,13 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 
 ## Agent Capabilities
 
-1. **SCAN** - Find ALL breaking changes in code
-2. **FIX** - Apply automatic remediations (7 patterns)
-3. **FLAG** - Explicitly flag items requiring manual review (6 patterns) or configuration testing (4 patterns)
-4. **VALIDATE** - Verify fixes are correct
+1. **SCAN** - Find breaking changes in code (23 patterns in scanner script, plus special detection for temp view reuse)
+2. **FIX** - Apply automatic remediations (10 Scala/SQL patterns via apply-fixes.py)
+3. **FLAG** - Explicitly flag items requiring manual review or configuration testing
+4. **VALIDATE** - Verify fixes are correct (12 critical patterns checked)
 5. **SUMMARIZE** - Add a summary markdown cell to the notebook
+
+> **Note:** The full `fix-patterns.json` documents 35 patterns for reference. The scanner script implements 23 regex-based patterns plus special detection for BC-SC-002 (temp view reuse). Some patterns require manual review and cannot be auto-detected.
 
 ---
 
@@ -89,14 +91,16 @@ summary = summary.replace('{AUTO_FIX_ITEMS}',
 
 **IMPORTANT:** When the user specifies a target DBR version, filter findings accordingly:
 
-| Target Version | Skip These Patterns |
-|----------------|---------------------|
-| **17.3** or **16.4** | Skip `BC-15.4-001` (VariantType in UDF) - **FIXED in 16.4** |
-| **15.4** | Flag ALL patterns including BC-15.4-001 |
+| Target Version | Patterns to Flag |
+|----------------|------------------|
+| **17.3** | All documented patterns (includes Spark 4.0 changes) |
+| **16.4** | All except BC-17.3-* patterns |
+| **15.4** | All except BC-16.4-* and BC-17.3-* patterns |
 
-**Example:** If user says "check compatibility for DBR 17.3" or "upgrade to 16.4":
-- ✅ Do NOT flag `VariantType()` in UDFs (BC-15.4-001) - it works in 16.4+
-- ✅ Still flag all other patterns
+**BC-15.4-001 Guidance (VariantType in UDF):**
+- ⚠️ Flag as MEDIUM severity regardless of version
+- Recommend testing on target DBR or using StringType + JSON as safer alternative
+- Do NOT claim it's "fixed" in later versions - behavior may vary
 
 ---
 
@@ -104,7 +108,7 @@ summary = summary.replace('{AUTO_FIX_ITEMS}',
 
 When scanning code, categorize ALL findings into these three categories and handle them appropriately:
 
-### 🔴 Category 1: AUTO-FIX (7 patterns)
+### 🔴 Category 1: AUTO-FIX (10 patterns)
 **Action: Automatically apply the fix**
 
 | ID | Pattern | Fix |
@@ -116,27 +120,40 @@ When scanning code, categorize ALL findings into these three categories and hand
 | BC-16.4-001c | `TraversableOnce` | Replace with `IterableOnce` |
 | BC-16.4-001d | `Traversable` | Replace with `Iterable` |
 | BC-16.4-001e | `Stream.from()` | Replace with `LazyList.from()` |
+| BC-16.4-001f | `.toIterator` | Replace with `.iterator` |
+| BC-16.4-001g | `.view.force` | Replace with `.view.to(List)` |
+| BC-16.4-001i | `'symbol` literal | Replace with `Symbol("symbol")` |
 
-### 🟡 Category 2: MANUAL REVIEW (6 patterns)
+### 🟡 Category 2: MANUAL REVIEW (12 patterns)
 **Action: FLAG for developer review with specific guidance**
 
 | ID | Pattern | Flag Message |
 |----|---------|--------------|
-| BC-15.4-001 | `VariantType()` in UDF | **⚠️ SKIP if target is 16.4+ or 17.3** - VARIANT UDFs work in 16.4+. Only flag if target is 15.4. |
+| BC-13.3-001 | `MERGE INTO` | **FLAG:** ANSI mode now throws CAST_OVERFLOW. Review type casting for potential overflow |
+| BC-13.3-003 | `overwriteSchema` + dynamic partition | **FLAG:** Cannot combine both. Separate schema evolution from partition overwrites |
+| BC-15.4-001 | `VariantType()` in UDF | **FLAG:** May throw exception in 15.4+. Test or use StringType + JSON |
 | BC-15.4-004 | `CREATE VIEW (col TYPE)` | **FLAG:** Column types in VIEW not allowed in 15.4+. Remove types, use CAST in SELECT |
-| BC-SC-001 | try/except around DataFrame transforms | **FLAG:** In Spark Connect, errors appear at action time, not transform time. Add `_ = df.columns` after transforms for early validation |
-| BC-SC-002 | Same temp view name used multiple times | **FLAG:** In Spark Connect, view name reuse causes data conflicts. Add UUID: `f"view_{uuid.uuid4().hex[:8]}"` |
+| BC-15.4-006 | `CREATE VIEW` | **FLAG:** Schema binding mode changed. Review schema evolution behavior |
+| BC-16.4-002 | `HashMap`/`HashSet` | **FLAG:** Iteration order changed in Scala 2.13. Don't rely on order |
+| BC-16.4-001h | `collection.Seq` | **FLAG:** Now refers to immutable.Seq. Use explicit import |
+| BC-SC-001 | try/except around DataFrame transforms | **FLAG:** In Spark Connect, errors appear at action time. Add `_ = df.columns` for early validation |
 | BC-SC-003 | UDF referencing external variables | **FLAG:** In Spark Connect, UDFs capture variables at execution time. Use function factory pattern |
 | BC-SC-004 | `df.columns` / `df.schema` in loops | **FLAG:** In Spark Connect, schema access triggers RPC. Cache outside loop: `cols = df.columns` |
+| BC-17.3-003 | `array()`/`map()`/`struct()` with nulls | **FLAG:** Spark Connect handles null literals differently. Handle nulls explicitly |
+| BC-17.3-004 | `DecimalType` | **FLAG:** Spark Connect decimal precision handling differs. Specify precision/scale explicitly |
 
-### ⚙️ Category 3: CONFIG CHECK (4 patterns)
+### ⚙️ Category 3: CONFIG CHECK (8 patterns)
 **Action: FLAG for testing - only add config if results differ**
 
 | ID | Pattern | Flag Message |
 |----|---------|--------------|
 | BC-13.3-002 | Parquet with timestamps | **FLAG:** Test Parquet timestamp reads. If wrong, add: `spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")` |
+| BC-13.3-004 | MERGE/UPDATE with type mismatch | **FLAG:** ANSI store assignment policy changed. If overflow errors, review types |
 | BC-15.4-002 | JDBC reads | **FLAG:** Test JDBC timestamp reads. If wrong, add: `spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")` |
+| BC-15.4-005 | JDBC reads (general) | **FLAG:** Review JDBC timestamp handling |
+| BC-16.4-003 | Cached data source reads | **FLAG:** Cache behavior changed. If issues, set `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` |
 | BC-16.4-004 | `materializeSource.*none` | **FLAG:** `materializeSource=none` not allowed in 16.4+. Remove or change to `auto` |
+| BC-16.4-006 | Auto Loader `cleanSource` | **FLAG:** cleanSource behavior changed. Test file cleanup behavior |
 | BC-17.3-002 | Auto Loader without explicit incremental | **FLAG:** Auto Loader default changed. Test performance; if slow, add: `.option("cloudFiles.useIncrementalListing", "auto")` |
 
 ---
@@ -189,11 +206,11 @@ Search for each pattern and report findings:
 grep -rn "input_file_name\s*(" --include="*.py" --include="*.sql" --include="*.scala" /path/to/scan
 ```
 
-**BC-15.4-001: VARIANT in Python UDF [SKIP if target is 16.4+ or 17.3]**
+**BC-15.4-001: VARIANT in Python UDF [REVIEW REQUIRED]**
 ```bash
 grep -rn "VariantType" --include="*.py" /path/to/scan
 ```
-> ⚠️ **SKIP THIS CHECK** if user's target version is 16.4 or 17.3 - VARIANT UDFs work in 16.4+!
+> ⚠️ **FLAG for review** - Test on target DBR or use StringType + JSON serialization as safer alternative.
 
 **BC-16.4-001: Scala JavaConverters [DEPRECATED in 16.4]**
 ```bash
@@ -216,10 +233,9 @@ grep -rn "\.to\[" --include="*.scala" /path/to/scan
 
 ### Step 3: Search for MANUAL REVIEW Patterns
 
-**BC-15.4-001: VARIANT in UDF [SKIP if target is 16.4+ or 17.3]**
-> ⚠️ **Only scan for this if target version is 15.4.** Skip if upgrading to 16.4 or 17.3.
+**BC-15.4-001: VARIANT in UDF [REVIEW REQUIRED]**
+> ⚠️ **Always flag for review.** Test on target DBR or use StringType + JSON as safer alternative.
 ```bash
-# Only run this if target is 15.4:
 grep -rn "VariantType\s*(" --include="*.py" /path/to/scan
 ```
 
@@ -400,13 +416,12 @@ Fixed 3 files:
 **Python files:**
 ```python
 # BEFORE
-from pyspark.sql.functions import input_file_name
+from pyspark.sql.functions import input_file_name, col
 df.withColumn("source", input_file_name())
 
-# AFTER
-df.select("*", "_metadata.file_name").withColumnRenamed("file_name", "source")
-# OR
-df.select("*", df["_metadata"]["file_name"].alias("source"))
+# AFTER (use col().alias() to safely add the metadata column)
+from pyspark.sql.functions import col
+df.select("*", col("_metadata.file_name").alias("source"))
 ```
 
 **SQL files:**
@@ -444,8 +459,8 @@ df.select(col("*"), col("_metadata.file_name").as("source"))
 
 ### Fix BC-15.4-001: VARIANT in Python UDF
 
-> ⚠️ **SKIP if target is 16.4+ or 17.3** - No fix needed! VARIANT UDFs work in 16.4+.
-> See [official docs](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf).
+> ⚠️ **REVIEW REQUIRED** - VARIANT UDFs may have issues. Test on target DBR or use the safer StringType + JSON approach below.
+> See [official docs](https://learn.microsoft.com/en-us/azure/databricks/udf/python#variants-with-udf) for current guidance.
 
 **For DBR 15.4 only - Convert VARIANT UDF to STRING with JSON:**
 ```python
@@ -591,27 +606,58 @@ All breaking changes resolved
 
 ## Quick Reference: All Breaking Changes
 
-### Code-Level Breaking Changes
+### 🔴 HIGH Severity - Code-Level Breaking Changes
 
-| ID | Severity | Pattern | Fix |
-|----|----------|---------|-----|
-| BC-17.3-001 | HIGH | `input_file_name()` | `_metadata.file_name` |
-| BC-15.4-001 | **SKIP** | `VariantType` in Python UDF | **Skip if target is 16.4+/17.3** - only an issue on 15.4 |
-| BC-16.4-001 | HIGH | `JavaConverters` | `CollectionConverters` |
-| BC-13.3-001 | HIGH | MERGE/UPDATE overflow | Widen column type |
-| BC-15.4-003 | MEDIUM | `IF !`, `IS !`, `! IN` | Use `NOT` |
-| BC-16.4-001b | MEDIUM | `.to[List]` | `.to(List)` |
-| BC-17.3-002 | MEDIUM | Auto Loader incremental | Set option explicitly |
-| BC-13.3-002 | MEDIUM | Parquet TIMESTAMP_NTZ | Set inferTimestampNTZ=false |
+| ID | Pattern | Fix |
+|----|---------|-----|
+| BC-17.3-001 | `input_file_name()` | `_metadata.file_name` |
+| BC-13.3-001 | MERGE INTO type overflow | Add explicit CAST with bounds check |
+| BC-16.4-001a | `JavaConverters` | `CollectionConverters` |
+| BC-16.4-001c | `TraversableOnce` | `IterableOnce` |
+| BC-16.4-001d | `Traversable` | `Iterable` |
+| BC-16.4-002 | `HashMap`/`HashSet` ordering | Don't rely on iteration order |
+| BC-SC-001 | Lazy schema analysis | Call `df.columns` for early validation |
+
+### 🟡 MEDIUM Severity - Potential Issues
+
+| ID | Pattern | Fix |
+|----|---------|-----|
+| BC-15.4-003 | `IF !`, `IS !`, `! IN` | Use `NOT` |
+| BC-16.4-001b | `.to[List]` | `.to(List)` |
+| BC-16.4-001e | `Stream.from()` | `LazyList.from()` |
+| BC-16.4-001f | `.toIterator` | `.iterator` |
+| BC-16.4-001g | `.view.force` | `.view.to(List)` |
+| BC-16.4-001h | `collection.Seq` | Use explicit `immutable.Seq` |
+| BC-13.3-003 | `overwriteSchema` + dynamic partition | Separate operations |
+| BC-17.3-002 | Auto Loader incremental | Set option explicitly |
+| BC-15.4-006 | VIEW schema binding | Review schema evolution |
+| BC-16.4-003 | Data source cache | Set legacy cache option |
+| BC-16.4-006 | Auto Loader cleanSource | Review cleanup behavior |
+
+### 🟢 LOW Severity - Subtle Changes
+
+| ID | Pattern | Fix |
+|----|---------|-----|
+| BC-15.4-001 | `VariantType` in UDF | Test or use StringType + JSON |
+| BC-15.4-004 | VIEW column types | Remove types, CAST in SELECT |
+| BC-13.3-002 | Parquet TIMESTAMP_NTZ | Set inferTimestampNTZ=false |
+| BC-15.4-002 | JDBC timestamp | Set useNullCalendar=false |
+| BC-15.4-005 | JDBC reads | Test timestamp handling |
+| BC-16.4-004 | MERGE materializeSource=none | Remove or use "auto" |
+| BC-16.4-001i | `'symbol` literal | `Symbol("symbol")` |
+| BC-16.4-005 | Json4s library | Review json4s usage |
+| BC-17.3-003 | Null handling in literals | Handle nulls explicitly |
+| BC-17.3-004 | Decimal precision | Specify precision/scale |
+| BC-14.3-001 | Thriftserver hive.aux.jars.path | Config removed |
+| BC-13.3-004 | ANSI store assignment | Review type policies |
 
 ### Spark Connect Behavioral Changes (Serverless/Connect Users)
 
 | ID | Severity | Behavior | Best Practice |
 |----|----------|----------|---------------|
 | BC-SC-001 | HIGH | Lazy schema analysis | Call `df.columns` to trigger early error detection |
-| BC-SC-002 | HIGH | Temp view name lookup | Use UUID in temp view names |
-| BC-SC-003 | HIGH | UDF late binding | Use function factory to capture variables |
-| BC-SC-004 | MEDIUM | Schema access RPC | Cache `df.columns` locally in loops |
+| BC-SC-003 | LOW | UDF late binding | Use function factory to capture variables |
+| BC-SC-004 | LOW | Schema access RPC | Cache `df.columns` locally in loops |
 
 Source: [Compare Spark Connect to Spark Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic)
 

@@ -16,6 +16,7 @@
 # MAGIC | BC-SC-002 | Same temp view name | UUID in view name |
 # MAGIC | BC-SC-003 | External variable in UDF | Function factory |
 # MAGIC | BC-SC-004 | `df.columns` in loop | Cached locally |
+# MAGIC | BC-16.4-001a-i | Scala 2.13 patterns | Updated syntax |
 
 # COMMAND ----------
 
@@ -63,8 +64,8 @@ taxi_df.printSchema()
 # FIX BC-17.3-001: Use _metadata.file_name instead of input_file_name()
 # ============================================================================
 
-# Pattern 1: Direct usage - FIXED
-df_with_source = taxi_df.select("*", "_metadata.file_name").withColumnRenamed("file_name", "source_file")
+# Pattern 1: Direct usage - FIXED (use alias to avoid renaming wrong column)
+df_with_source = taxi_df.select("*", col("_metadata.file_name").alias("source_file"))
 
 # Pattern 2: Usage in select - FIXED
 df_selected = taxi_df.select(
@@ -392,10 +393,24 @@ print(f"Result columns: {len(result_fixed.columns)}")
 # MAGIC | BC-15.4-003 | `! IN`, `! BETWEEN`, `! LIKE` | `NOT IN`, `NOT BETWEEN`, `NOT LIKE` | ✅ |
 # MAGIC | BC-15.4-001 | `VariantType()` in UDF | `StringType()` + JSON | ✅ |
 # MAGIC | BC-17.3-002 | Implicit incremental listing | Explicit `.option()` | ✅ |
-# MAGIC | BC-SC-002 | Same temp view name | UUID in view name | ✅ |
 # MAGIC | BC-SC-003 | External variable capture | Function factory | ✅ |
 # MAGIC | BC-SC-004 | `df.columns` in loop | Cached in local set | ✅ |
 # MAGIC | BC-15.4-004 | Column types in VIEW | Removed type constraints | ✅ |
+# MAGIC 
+# MAGIC ### Scala 2.13 Fixes (for .scala files)
+# MAGIC 
+# MAGIC | ID | Original Pattern | Fixed Pattern |
+# MAGIC |----|------------------|---------------|
+# MAGIC | BC-16.4-001a | `JavaConverters` | `CollectionConverters` |
+# MAGIC | BC-16.4-001b | `.to[List]` | `.to(List)` |
+# MAGIC | BC-16.4-001c | `TraversableOnce` | `IterableOnce` |
+# MAGIC | BC-16.4-001d | `Traversable` | `Iterable` |
+# MAGIC | BC-16.4-001e | `Stream.from()` | `LazyList.from()` |
+# MAGIC | BC-16.4-001f | `.toIterator` | `.iterator` |
+# MAGIC | BC-16.4-001g | `.view.force` | `.view.to(List)` |
+# MAGIC | BC-16.4-001h | `collection.Seq` | Explicit `immutable.Seq` |
+# MAGIC | BC-16.4-001i | `'symbol` | `Symbol("symbol")` |
+# MAGIC | BC-16.4-002 | `HashMap` iteration | Explicit sorting |
 # MAGIC 
 # MAGIC ### ✅ This notebook is now compatible with DBR 17.3 LTS!
 

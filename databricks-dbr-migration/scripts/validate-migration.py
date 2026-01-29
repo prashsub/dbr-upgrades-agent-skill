@@ -51,11 +51,11 @@ BREAKING_PATTERNS = [
         "name": "VARIANT in Python UDF",
         "pattern": r"VariantType\s*\(",
         "file_types": [".py"],
-        "severity": "HIGH",
-        "message": "VariantType in Python UDFs fails in DBR 15.4+"
+        "severity": "MEDIUM",
+        "message": "VariantType in Python UDFs may fail - test on target DBR or use StringType + JSON"
     },
     {
-        "id": "BC-15.4-003a",
+        "id": "BC-15.4-003",
         "name": "'!' syntax (IF/IS)",
         "pattern": r"(IF|IS)\s*!(?!\s*=)",
         "file_types": [".sql"],
@@ -102,6 +102,38 @@ BREAKING_PATTERNS = [
         "severity": "HIGH",
         "message": "Traversable renamed to Iterable in Scala 2.13"
     },
+    {
+        "id": "BC-16.4-001e",
+        "name": "Scala Stream",
+        "pattern": r"\bStream\s*\.\s*(from|continually|iterate)",
+        "file_types": [".scala"],
+        "severity": "MEDIUM",
+        "message": "Stream is deprecated - use LazyList in Scala 2.13"
+    },
+    {
+        "id": "BC-16.4-001f",
+        "name": "Scala .toIterator",
+        "pattern": r"\.toIterator\b",
+        "file_types": [".scala"],
+        "severity": "MEDIUM",
+        "message": ".toIterator is deprecated - use .iterator"
+    },
+    {
+        "id": "BC-16.4-001g",
+        "name": "Scala .view.force",
+        "pattern": r"\.view\s*\.\s*force\b",
+        "file_types": [".scala"],
+        "severity": "MEDIUM",
+        "message": ".view.force is deprecated - use .view.to(List)"
+    },
+    {
+        "id": "BC-16.4-001i",
+        "name": "Scala Symbol literal",
+        "pattern": r"'[a-zA-Z_][a-zA-Z0-9_]*\b",
+        "file_types": [".scala"],
+        "severity": "LOW",
+        "message": "Symbol literals deprecated - use Symbol(\"name\")"
+    },
 ]
 
 # Expected replacements that SHOULD exist after migration
@@ -127,7 +159,7 @@ EXPECTED_REPLACEMENTS = [
         "name": "NOT syntax",
         "pattern": r"\b(IF\s+NOT\s+EXISTS|IS\s+NOT\s+NULL|NOT\s+IN|NOT\s+BETWEEN|NOT\s+LIKE|NOT\s+EXISTS)\b",
         "file_types": [".sql"],
-        "requires": "BC-15.4-003a",
+        "requires_any": ["BC-15.4-003", "BC-15.4-003b"],
         "message": "Expected NOT syntax replacements"
     },
 ]
@@ -216,8 +248,12 @@ def validate_codebase(
     print("Checking for expected replacements...")
     for repl in EXPECTED_REPLACEMENTS:
         # Only check if the related breaking change was found somewhere
+        # Support both "requires" (single) and "requires_any" (list)
         if repl.get("requires") and repl["requires"] not in found_breaking:
             continue
+        if repl.get("requires_any"):
+            if not any(req in found_breaking for req in repl["requires_any"]):
+                continue
         
         found_replacement = False
         for file_path in all_files:
@@ -238,7 +274,11 @@ def validate_codebase(
                         message=repl["message"]
                     ))
         
-        if not found_replacement and repl.get("requires") in found_breaking:
+        requires_met = (
+            repl.get("requires") in found_breaking or
+            (repl.get("requires_any") and any(req in found_breaking for req in repl["requires_any"]))
+        )
+        if not found_replacement and requires_met:
             checks.append(ValidationCheck(
                 check_name=f"{repl['id']}: {repl['name']}",
                 check_type="expected_replacement",
