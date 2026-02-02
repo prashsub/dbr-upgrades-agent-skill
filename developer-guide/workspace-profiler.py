@@ -13,7 +13,8 @@
 # MAGIC 
 # MAGIC ## Output
 # MAGIC - **Delta Table**: `{catalog}.{schema}.dbr_migration_scan_results`
-# MAGIC - **CSV Export**: Optional export to a specified path
+# MAGIC - **CSV Export**: Optional export to a specified path (always overwrites)
+# MAGIC - **Re-runs**: Set `truncate_on_scan=True` (default) to replace results, or `False` to append history
 # MAGIC 
 # MAGIC ## Usage
 # MAGIC 1. Configure the parameters below
@@ -75,6 +76,7 @@ CONFIG = {
     "output_catalog": "main",           # Unity Catalog name
     "output_schema": "dbr_migration",   # Schema name
     "output_table": "scan_results",     # Table name
+    "truncate_on_scan": True,           # Truncate table before each scan (avoids duplicates on re-runs)
     
     # Optional CSV export
     "export_csv": True,
@@ -1163,10 +1165,20 @@ results_with_metadata = results_df \
     .withColumn("scan_id", lit(datetime.now().strftime("%Y%m%d_%H%M%S"))) \
     .withColumn("target_dbr_version", lit(CONFIG["target_dbr_version"]))
 
-# Write to Delta (append mode to keep history)
+# Truncate table before writing if configured (avoids duplicates on re-runs)
+if CONFIG.get("truncate_on_scan", False):
+    try:
+        spark.sql(f"TRUNCATE TABLE {output_table}")
+        print(f"🗑️ Truncated existing table: {output_table}")
+    except Exception as e:
+        # Table might not exist yet, that's OK
+        print(f"ℹ️ Table {output_table} will be created (truncate skipped: {e})")
+
+# Write to Delta
+write_mode = "overwrite" if CONFIG.get("truncate_on_scan", False) else "append"
 results_with_metadata.write \
     .format("delta") \
-    .mode("append") \
+    .mode(write_mode) \
     .option("mergeSchema", "true") \
     .saveAsTable(output_table)
 
