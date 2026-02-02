@@ -87,13 +87,28 @@ summary = summary.replace('{AUTO_FIX_ITEMS}',
 
 ---
 
-## CRITICAL: Target Version Awareness
+## CRITICAL: Migration Path Awareness
 
-**IMPORTANT:** When the user specifies a target DBR version, filter findings accordingly:
+**IMPORTANT:** When scanning, consider both the SOURCE (current) and TARGET DBR versions. Only flag patterns that are relevant to the migration path.
+
+### Source Version Filtering
+
+If the user is migrating FROM a specific version, skip patterns that were already addressed:
+
+| Migration Path | Patterns to Flag |
+|----------------|------------------|
+| **13.3 → 17.3** | BC-14.3-*, BC-15.4-*, BC-16.4-*, BC-17.3-* (skip BC-13.3-*) |
+| **14.3 → 17.3** | BC-15.4-*, BC-16.4-*, BC-17.3-* |
+| **15.4 → 17.3** | BC-16.4-*, BC-17.3-* |
+| **Any → 16.4** | All patterns up to BC-16.4-* |
+
+**Example:** User says "I'm upgrading from 13.3 to 17.3" - skip BC-13.3-* patterns because they're already working on 13.3.
+
+### Target Version Filtering
 
 | Target Version | Patterns to Flag |
 |----------------|------------------|
-| **17.3** | All documented patterns (includes Spark 4.0 changes) |
+| **17.3** | All patterns up to 17.3 |
 | **16.4** | All except BC-17.3-* patterns |
 | **15.4** | All except BC-16.4-* and BC-17.3-* patterns |
 

@@ -1,7 +1,15 @@
 {
   "description": "Machine-readable fix patterns for Databricks LTS migration (35 patterns)",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "target_runtime": "17.3 LTS",
+  "migration_path_filtering": {
+    "note": "Use source_version to skip patterns already working on current DBR",
+    "example": {
+      "source_version": "13.3",
+      "target_version": "17.3",
+      "effect": "Skips BC-13.3-* patterns (already working), includes BC-14.3-* through BC-17.3-*"
+    }
+  },
   "pattern_counts": {
     "auto_fix": 10,
     "manual_review": 12,

@@ -22,8 +22,13 @@ Run the [workspace-profiler.py](workspace-profiler.py) notebook to get a list of
 
 ```python
 # In Databricks, run the profiler notebook
+# Configure migration path in CONFIG section:
+#   "source_dbr_version": "13.3"  # Your CURRENT DBR version (patterns <= this are skipped)
+#   "target_dbr_version": "17.3"  # Your TARGET DBR version
 # Output: List of jobs/notebooks with potential issues
 ```
+
+**Migration Path Filtering:** The profiler automatically skips patterns that don't apply to your migration. For example, if upgrading from 13.3 → 17.3, BC-13.3-* patterns are skipped because they're already working on your current version.
 
 **Output:** Delta table + CSV with jobs that need review.
 

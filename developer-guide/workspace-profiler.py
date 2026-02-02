@@ -16,6 +16,11 @@
 # MAGIC - **CSV Export**: Optional export to a specified path (always overwrites)
 # MAGIC - **Re-runs**: Set `truncate_on_scan=True` (default) to replace results, or `False` to append history
 # MAGIC 
+# MAGIC ## Migration Path Filtering
+# MAGIC - Set `source_dbr_version` to your CURRENT DBR version (e.g., "13.3")
+# MAGIC - Only patterns introduced AFTER your source version will be flagged
+# MAGIC - Example: For 13.3 → 17.3 migration, BC-13.3-xxx patterns are skipped (already working)
+# MAGIC 
 # MAGIC ## Usage
 # MAGIC 1. Configure the parameters below
 # MAGIC 2. Run all cells
@@ -94,8 +99,9 @@ CONFIG = {
     ],
     "file_extensions": [".py", ".sql", ".scala"],
     
-    # Target DBR version
-    "target_dbr_version": "17.3",
+    # Migration path - only patterns introduced AFTER source_dbr_version will be flagged
+    "source_dbr_version": "13.3",        # Current DBR version (e.g., "13.3" - patterns <= this are skipped)
+    "target_dbr_version": "17.3",        # Target DBR version
     
     # ============================================================
     # TESTING/DEVELOPMENT LIMITS (set to None for full scan)
@@ -124,6 +130,40 @@ import re
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
+
+def parse_version(version_str: str) -> Tuple[int, int]:
+    """Parse version string like '13.3' or '17.3' into tuple (major, minor)."""
+    parts = version_str.split(".")
+    return (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+
+def version_greater_than(v1: str, v2: str) -> bool:
+    """Return True if v1 > v2."""
+    return parse_version(v1) > parse_version(v2)
+
+def filter_patterns_for_migration(patterns: list, source_version: str, target_version: str) -> list:
+    """
+    Filter patterns to only include those relevant for the migration path.
+    
+    A pattern is relevant if its introduced_in version is:
+    - Greater than the source version (already working on source)
+    - Less than or equal to the target version
+    
+    Example: For 13.3 → 17.3 migration:
+    - BC-13.3-001 (introduced_in="13.3") is SKIPPED (already working on 13.3)
+    - BC-14.3-001 (introduced_in="14.3") is INCLUDED
+    - BC-17.3-001 (introduced_in="17.3") is INCLUDED
+    """
+    source = parse_version(source_version)
+    target = parse_version(target_version)
+    
+    filtered = []
+    for p in patterns:
+        introduced = parse_version(p.introduced_in)
+        # Include if introduced AFTER source and AT OR BEFORE target
+        if introduced > source and introduced <= target:
+            filtered.append(p)
+    
+    return filtered
 
 @dataclass
 class BreakingChangePattern:
@@ -871,8 +911,8 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
                 if notebook_path:
                     content, file_type = export_notebook(notebook_path)
                     if content:
-                        # Scan for patterns
-                        findings = scan_content_for_patterns(content, file_type, BREAKING_PATTERNS)
+                        # Scan for patterns (filtered for migration path)
+                        findings = scan_content_for_patterns(content, file_type, APPLICABLE_PATTERNS)
                         
                         # Scan for duplicate temp views
                         findings.extend(scan_duplicate_temp_views(content, file_type))
@@ -980,7 +1020,7 @@ def scan_workspace_path(
                     try:
                         content, file_type = export_notebook(obj.path)
                         if content:
-                            findings = scan_content_for_patterns(content, file_type, BREAKING_PATTERNS)
+                            findings = scan_content_for_patterns(content, file_type, APPLICABLE_PATTERNS)
                             findings.extend(scan_duplicate_temp_views(content, file_type))
                             
                             for finding in findings:
@@ -1054,6 +1094,16 @@ RESULT_SCHEMA = StructType([
 # Generate unique scan ID (or reuse existing for resume)
 import uuid
 SCAN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# Filter patterns for the migration path (source → target)
+source_version = CONFIG.get("source_dbr_version", "13.3")
+target_version = CONFIG.get("target_dbr_version", "17.3")
+
+APPLICABLE_PATTERNS = filter_patterns_for_migration(BREAKING_PATTERNS, source_version, target_version)
+
+print(f"Migration path: DBR {source_version} → {target_version}")
+print(f"Patterns applicable: {len(APPLICABLE_PATTERNS)} of {len(BREAKING_PATTERNS)} total")
+print(f"Skipped patterns (already working on {source_version}): {len(BREAKING_PATTERNS) - len(APPLICABLE_PATTERNS)}")
 
 # Run the scan
 all_results = []

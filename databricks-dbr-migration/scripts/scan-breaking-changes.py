@@ -3,10 +3,18 @@
 Databricks LTS Migration - Breaking Changes Scanner
 
 Scans a codebase for patterns affected by breaking changes between
-Databricks Runtime 13.3 LTS and 17.3 LTS.
+Databricks Runtime LTS versions.
 
 Usage:
-    python scan-breaking-changes.py /path/to/codebase [--target-version 17.3]
+    python scan-breaking-changes.py /path/to/codebase [--source-version 13.3] [--target-version 17.3]
+
+Migration Path Filtering:
+    --source-version: Your CURRENT DBR version (patterns <= this are skipped)
+    --target-version: Your TARGET DBR version (patterns > this are skipped)
+    
+    Example: For 13.3 → 17.3 migration:
+    - BC-13.3-001 is SKIPPED (already working on 13.3)
+    - BC-14.3-001 through BC-17.3-xxx are INCLUDED
 
 Output:
     - Console report of findings
@@ -473,11 +481,33 @@ def scan_duplicate_temp_views(file_path: Path, lines: List[str], file_ext: str) 
     return findings
 
 
-def should_check_pattern(pattern: dict, target_version: str) -> bool:
-    """Check if pattern applies to target version."""
+def should_check_pattern(pattern: dict, source_version: Optional[str], target_version: str) -> bool:
+    """
+    Check if pattern applies to the migration path.
+    
+    A pattern is relevant if its introduced_in version is:
+    - Greater than the source version (already working on source)
+    - Less than or equal to the target version
+    
+    Args:
+        pattern: The breaking change pattern dict
+        source_version: Current DBR version (patterns <= this are skipped). None means include all.
+        target_version: Target DBR version (patterns > this are skipped)
+    """
     introduced = get_version_number(pattern["introduced_in"])
     target = get_version_number(target_version)
-    return introduced <= target
+    
+    # Must be at or before target
+    if introduced > target:
+        return False
+    
+    # If source specified, must be AFTER source (already working on source)
+    if source_version:
+        source = get_version_number(source_version)
+        if introduced <= source:
+            return False
+    
+    return True
 
 
 def scan_file(file_path: Path, patterns: List[dict]) -> List[Finding]:
@@ -524,18 +554,40 @@ def scan_file(file_path: Path, patterns: List[dict]) -> List[Finding]:
 def scan_directory(
     root_path: Path,
     target_version: str,
+    source_version: Optional[str] = None,
     exclude_dirs: Optional[List[str]] = None
 ) -> ScanResult:
-    """Scan directory tree for breaking changes."""
+    """Scan directory tree for breaking changes.
+    
+    Args:
+        root_path: Directory to scan
+        target_version: Target DBR version
+        source_version: Current DBR version (patterns <= this are skipped)
+        exclude_dirs: Directories to exclude from scan
+    """
     
     if exclude_dirs is None:
         exclude_dirs = ['.git', '__pycache__', 'node_modules', '.venv', 'venv', 'target', '.idea']
     
-    # Filter patterns for target version
+    # Filter patterns for migration path (source → target)
     applicable_patterns = [
         p for p in PATTERNS 
-        if should_check_pattern(p, target_version)
+        if should_check_pattern(p, source_version, target_version)
     ]
+    
+    # Log filtering info
+    total_patterns = len(PATTERNS)
+    applicable_count = len(applicable_patterns)
+    skipped_count = total_patterns - applicable_count
+    
+    if source_version:
+        print(f"Migration path: DBR {source_version} → {target_version}")
+    else:
+        print(f"Target version: DBR {target_version}")
+    print(f"Patterns applicable: {applicable_count} of {total_patterns}")
+    if skipped_count > 0:
+        print(f"Patterns skipped: {skipped_count}")
+    print()
     
     result = ScanResult(
         scan_date=datetime.now().isoformat(),
@@ -674,6 +726,11 @@ def main():
         help="Path to codebase directory to scan"
     )
     parser.add_argument(
+        "--source-version", "-s",
+        default=None,
+        help="Source/current DBR version (patterns <= this are skipped). Example: 13.3"
+    )
+    parser.add_argument(
         "--target-version", "-t",
         default="17.3",
         help="Target DBR version (default: 17.3)"
@@ -696,13 +753,14 @@ def main():
         print(f"Error: Path does not exist: {root_path}", file=sys.stderr)
         sys.exit(1)
     
-    print(f"Scanning {root_path} for breaking changes (target: DBR {args.target_version})...")
+    migration_info = f"DBR {args.source_version} → {args.target_version}" if args.source_version else f"target DBR {args.target_version}"
+    print(f"Scanning {root_path} for breaking changes ({migration_info})...")
     print()
     
     exclude_dirs = ['.git', '__pycache__', 'node_modules', '.venv', 'venv', 'target', '.idea']
     exclude_dirs.extend(args.exclude)
     
-    result = scan_directory(root_path, args.target_version, exclude_dirs)
+    result = scan_directory(root_path, args.target_version, args.source_version, exclude_dirs)
     
     print_report(result)
     

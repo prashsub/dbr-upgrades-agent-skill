@@ -143,8 +143,16 @@ scan and fix this notebook for DBR 17.3 compatibility
 Use the Python script to scan your code:
 
 ```bash
+# Full scan (all patterns)
 python databricks-dbr-migration/scripts/scan-breaking-changes.py \
   --path /path/to/your/code \
+  --output scan-results.json
+
+# Migration path filtering (e.g., 13.3 → 17.3, skips BC-13.3-* patterns)
+python databricks-dbr-migration/scripts/scan-breaking-changes.py \
+  --path /path/to/your/code \
+  --source-version 13.3 \
+  --target-version 17.3 \
   --output scan-results.json
 ```
 
@@ -152,6 +160,9 @@ Or use the workspace profiler to scan all jobs and notebooks:
 
 ```python
 # Run in Databricks notebook
+# Configure migration path in CONFIG:
+#   "source_dbr_version": "13.3"  # Current version (patterns <= this are skipped)
+#   "target_dbr_version": "17.3"  # Target version
 %run ./developer-guide/workspace-profiler.py
 ```
 
