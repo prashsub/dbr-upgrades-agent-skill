@@ -25,23 +25,34 @@ This guide explains each breaking change in simple terms, with examples showing:
 |-----|------|-------------|
 | [BC-15.4-001](#bc-154-001-variant-type-in-python-udf) | VARIANT Type in Python UDF | 15.4+ |
 | [BC-15.4-003](#bc-154-003--syntax-for-not) | '!' Syntax for NOT | 15.4 |
+| [BC-15.4-006](#bc-154-006-view-schema-binding-mode) | View Schema Binding Mode | 15.4 |
 | [BC-16.4-001b](#bc-164-001b-scala-tocollection-syntax) | Scala .to[Collection] | 16.4 |
 | [BC-16.4-001e](#bc-164-001e-scala-stream-lazy) | Scala Stream (Lazy) | 16.4 |
 | [BC-16.4-001f](#bc-164-001f-scala-toiterator) | Scala .toIterator | 16.4 |
 | [BC-16.4-001g](#bc-164-001g-scala-viewforce) | Scala .view.force | 16.4 |
 | [BC-16.4-001h](#bc-164-001h-scala-collectionseq) | Scala collection.Seq | 16.4 |
+| [BC-16.4-003](#bc-164-003-data-source-cache-options) | Data Source Cache Options | 16.4 |
+| [BC-16.4-006](#bc-164-006-auto-loader-cleansource-behavior) | Auto Loader cleanSource | 16.4 |
 | [BC-17.3-002](#bc-173-002-auto-loader-incremental-listing) | Auto Loader Incremental Listing | 17.3 |
+| [BC-17.3-002b](#bc-173-002b-auto-loader-default-behavior) | Auto Loader Default Behavior | 17.3 |
 | [BC-13.3-003](#bc-133-003-overwriteschema-with-dynamic-partition) | overwriteSchema + Dynamic Partition | 13.3 |
 | [BC-SC-002](#bc-sc-002-temp-view-name-reuse) | Temp View Name Reuse | 13.3+ |
 
 ### LOW Severity
 | ID | Name | DBR Version |
 |-----|------|-------------|
-| [BC-16.4-001i](#bc-164-001i-scala-symbol-literals) | Scala Symbol Literals | 16.4 |
-| [BC-13.3-002](#bc-133-002-parquet-timestamp-ntz) | Parquet Timestamp NTZ | 13.3 |
+| [BC-13.3-002b](#bc-133-002b-parquet-read-timestamp_ntz) | Parquet Read TIMESTAMP_NTZ | 13.3 |
+| [BC-13.3-004](#bc-133-004-ansi-store-assignment-policy) | ANSI Store Assignment Policy | 13.3 |
+| [BC-14.3-001](#bc-143-001-thriftserver-config-removed) | Thriftserver Config Removed | 14.3 |
 | [BC-15.4-002](#bc-154-002-jdbc-usenullcalendar) | JDBC useNullCalendar | 15.4 |
 | [BC-15.4-004](#bc-154-004-view-column-type-definition) | View Column Type Definition | 15.4 |
+| [BC-15.4-005](#bc-154-005-jdbc-read-timestamp-handling) | JDBC Read Timestamp Handling | 15.4 |
+| [BC-16.4-001i](#bc-164-001i-scala-symbol-literals) | Scala Symbol Literals | 16.4 |
 | [BC-16.4-004](#bc-164-004-merge-materializesourcenone) | MERGE materializeSource=none | 16.4 |
+| [BC-16.4-005](#bc-164-005-json4s-library-version) | Json4s Library Version | 16.4 |
+| [BC-13.3-002](#bc-133-002-parquet-timestamp-ntz) | Parquet Timestamp NTZ Config | 13.3 |
+| [BC-17.3-003](#bc-173-003-spark-connect-literal-handling) | Spark Connect Literal Handling | 17.3 |
+| [BC-17.3-005](#bc-173-005-spark-connect-decimal-precision) | Spark Connect Decimal Precision | 17.3 |
 | [BC-SC-003](#bc-sc-003-udf-external-variable-capture) | UDF External Variable Capture | 14.3+ |
 | [BC-SC-004](#bc-sc-004-schema-access-in-loops) | Schema Access in Loops | 13.3+ |
 
@@ -765,6 +776,105 @@ df = (spark.readStream
 
 ---
 
+### BC-17.3-002b: Auto Loader Default Behavior
+
+**What Changed:** In DBR 17.3, Auto Loader now performs full directory listings by default instead of incremental listings.
+
+**Why It Matters:** If you relied on the implicit incremental listing behavior for performance, Auto Loader may be slower.
+
+#### 🔍 How It's Detected
+
+```regex
+\.format\s*\(\s*["']cloudFiles["']\s*\)
+```
+
+Flags all Auto Loader usage for review.
+
+#### ✅ The Fix
+
+To preserve the old behavior:
+```python
+df = (spark.readStream
+    .format("cloudFiles")
+    .option("cloudFiles.format", "parquet")
+    .option("cloudFiles.useIncrementalListing", "auto")  # Preserve old behavior
+    .load("/data/incoming/")
+)
+```
+
+---
+
+### BC-16.4-006: Auto Loader cleanSource Behavior
+
+**What Changed:** The `cloudFiles.cleanSource` behavior changed in DBR 16.4.
+
+**Why It Matters:** File cleanup behavior after processing may differ from previous versions.
+
+#### 🔍 How It's Detected
+
+```regex
+cloudFiles\.cleanSource
+```
+
+#### ✅ The Fix
+
+Review your cleanSource settings and test file cleanup behavior:
+```python
+df = (spark.readStream
+    .format("cloudFiles")
+    .option("cloudFiles.cleanSource", "delete")  # Verify this works as expected
+    .load(path)
+)
+```
+
+---
+
+### BC-15.4-006: View Schema Binding Mode
+
+**What Changed:** In DBR 15.4, the default view schema binding changed from BINDING to schema compensation.
+
+**Why It Matters:** Views may behave differently when the underlying table schema changes.
+
+#### 🔍 How It's Detected
+
+```regex
+CREATE\s+(OR\s+REPLACE\s+)?VIEW\b
+```
+
+Flags all CREATE VIEW statements for review.
+
+#### ✅ The Fix
+
+Verify view definitions handle underlying table schema changes correctly. Consider using explicit WITH SCHEMA BINDING or WITH SCHEMA COMPENSATION:
+```sql
+-- Explicit binding mode
+CREATE VIEW my_view WITH SCHEMA BINDING AS 
+SELECT * FROM my_table;
+```
+
+---
+
+### BC-16.4-003: Data Source Cache Options
+
+**What Changed:** Table reads now respect options for all cached plans.
+
+**Why It Matters:** Cached table scans may behave differently if options change between queries.
+
+#### 🔍 How It's Detected
+
+```regex
+spark\.sql\.legacy\.readFileSourceTableCacheIgnoreOptions
+```
+
+#### ✅ The Fix
+
+To restore old behavior where cached plans ignore options:
+```python
+spark.conf.set("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions", "true")
+```
+
+---
+
 ### BC-13.3-003: overwriteSchema with Dynamic Partition
 
 **What Changed:** In DBR 13.3+, you cannot combine `overwriteSchema=true` with `partitionOverwriteMode='dynamic'` in the same write operation.
@@ -992,6 +1102,184 @@ spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")
 
 ---
 
+### BC-13.3-002b: Parquet Read TIMESTAMP_NTZ
+
+**What Changed:** Parquet reads may infer `TIMESTAMP_NTZ` type differently in DBR 13.3+.
+
+**Why It Matters:** Timestamp columns may have different types than expected.
+
+#### 🔍 How It's Detected
+
+```regex
+\.parquet\s*\(|\.format\s*\(\s*["']parquet["']\s*\)
+```
+
+Flags Parquet reads for review.
+
+#### ✅ The Fix
+
+Set explicit configuration or use an explicit schema:
+```python
+# Option 1: Disable NTZ inference
+spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")
+
+# Option 2: Use explicit schema
+schema = StructType([StructField("ts", TimestampType(), True)])
+df = spark.read.schema(schema).parquet(path)
+```
+
+---
+
+### BC-13.3-004: ANSI Store Assignment Policy
+
+**What Changed:** The default `storeAssignmentPolicy` is now ANSI, which throws errors on overflow instead of silent truncation.
+
+**Why It Matters:** INSERT, UPDATE, and MERGE operations may fail on type mismatches that previously succeeded.
+
+#### 🔍 How It's Detected
+
+```regex
+spark\.sql\.storeAssignmentPolicy
+```
+
+#### ✅ The Fix
+
+Ensure operations handle type casting explicitly:
+```python
+# If you need legacy behavior:
+spark.conf.set("spark.sql.storeAssignmentPolicy", "LEGACY")
+
+# Better: Add explicit type checks in your code
+```
+
+---
+
+### BC-14.3-001: Thriftserver Config Removed
+
+**What Changed:** The `hive.aux.jars.path` and `hive.server2.global.init.file.location` configurations are removed in DBR 14.3.
+
+**Why It Matters:** Thriftserver configurations using these settings will not work.
+
+#### 🔍 How It's Detected
+
+```regex
+hive\.aux\.jars\.path|hive\.server2\.global\.init\.file\.location
+```
+
+#### ✅ The Fix
+
+Use cluster init scripts or Unity Catalog volumes for JARs instead:
+```python
+# OLD (no longer works):
+spark.conf.set("hive.aux.jars.path", "/path/to/jars")
+
+# NEW: Use cluster init scripts or install JARs via cluster libraries
+```
+
+---
+
+### BC-16.4-005: Json4s Library Version
+
+**What Changed:** Json4s was downgraded from 4.0.7 to 3.7.0-M11 for Scala 2.13 compatibility.
+
+**Why It Matters:** Some Json4s APIs may have changed between versions.
+
+#### 🔍 How It's Detected
+
+```regex
+import\s+org\.json4s
+```
+
+#### ✅ The Fix
+
+Review Json4s API usage for compatibility with 3.7.x:
+```scala
+// Check for API differences between 4.0.x and 3.7.x
+// Common changes: serialization defaults, implicit conversions
+```
+
+---
+
+### BC-17.3-003: Spark Connect Literal Handling
+
+**What Changed:** In Spark Connect mode (DBR 17.3), null values in array/map/struct literals are now preserved, and decimal precision defaults to (38, 18).
+
+**Why It Matters:** Code that relies on null coercion or specific decimal precision may behave differently.
+
+#### 🔍 How It's Detected
+
+```regex
+\b(array|map|struct)\s*\(
+```
+
+Flags literal construction for review.
+
+#### ✅ The Fix
+
+Handle nulls explicitly:
+```python
+from pyspark.sql.functions import array, coalesce, lit
+
+# BEFORE (null might be coerced):
+result = array(col("a"), col("b"))
+
+# AFTER (explicit null handling):
+result = array(coalesce(col("a"), lit(0)), coalesce(col("b"), lit(0)))
+```
+
+---
+
+### BC-17.3-005: Spark Connect Decimal Precision
+
+**What Changed:** Decimal precision in array/map literals defaults to `SYSTEM_DEFAULT` (38, 18) in Spark Connect mode.
+
+**Why It Matters:** Logical plan analysis may differ, affecting plan comparison tests.
+
+#### 🔍 How It's Detected
+
+```regex
+DecimalType\s*\(|\.cast\s*\(\s*["']decimal
+```
+
+#### ✅ The Fix
+
+Specify explicit precision/scale if exact precision is required:
+```python
+from pyspark.sql.types import DecimalType
+
+# Be explicit about precision
+df.withColumn("amount", col("amount").cast(DecimalType(10, 2)))
+```
+
+---
+
+### BC-15.4-005: JDBC Read Timestamp Handling
+
+**What Changed:** JDBC timestamp handling changed - `useNullCalendar` default is now `true`.
+
+**Why It Matters:** Timestamps from JDBC sources may be interpreted differently.
+
+#### 🔍 How It's Detected
+
+```regex
+\.jdbc\s*\(|\.format\s*\(\s*["']jdbc["']\s*\)
+```
+
+Flags JDBC reads for review.
+
+#### ✅ The Fix
+
+Test timestamp values and set configuration if needed:
+```python
+# To restore old behavior:
+spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
+
+# Then read from JDBC
+df = spark.read.jdbc(url, table)
+```
+
+---
+
 ### BC-SC-003: UDF External Variable Capture
 
 **What Changed:** In Spark Connect, UDFs serialize external variables at **execution time**, not at **definition time**.
@@ -1095,16 +1383,15 @@ for col_name in cached_columns:
 
 ---
 
-## Summary: Detection Patterns
+## Summary: Detection Patterns (35 Total)
 
 | ID | Pattern | File Types |
 |----|---------|------------|
 | BC-17.3-001 | `\binput_file_name\s*\(` | .py, .sql, .scala |
-| BC-13.3-001 | `\bMERGE\s+INTO\b` | .py, .sql, .scala |
-| BC-13.3-003 | `overwriteSchema.*true` | .py, .scala |
-| BC-15.4-001 | `VariantType\s*\(` | .py |
-| BC-15.4-003 | `(IF\|IS)\s*!(?!\s*=)` | .sql |
-| BC-15.4-003b | `\s!\s*(IN\|BETWEEN\|LIKE\|EXISTS)\b` | .sql |
+| BC-17.3-002 | `cloudFiles\.useIncrementalListing` | .py, .sql, .scala |
+| BC-17.3-002b | `\.format\s*\(\s*["']cloudFiles["']\s*\)` | .py, .scala |
+| BC-17.3-003 | `\b(array\|map\|struct)\s*\(` | .py, .scala |
+| BC-17.3-005 | `DecimalType\s*\(` | .py, .scala |
 | BC-16.4-001a | `import\s+scala\.collection\.JavaConverters` | .scala |
 | BC-16.4-001b | `\.to\s*\[\s*(List\|Set\|...)\s*\]` | .scala |
 | BC-16.4-001c | `\bTraversableOnce\b` | .scala |
@@ -1115,7 +1402,23 @@ for col_name in cached_columns:
 | BC-16.4-001h | `\bcollection\.Seq\b` | .scala |
 | BC-16.4-001i | `'[a-zA-Z_][a-zA-Z0-9_]*\b` | .scala |
 | BC-16.4-002 | `\b(HashMap\|HashSet)\s*[\[\(]` | .scala |
-| BC-17.3-002 | `format\s*\(\s*["']cloudFiles["']\s*\)` | .py, .scala |
+| BC-16.4-003 | `spark\.sql\.legacy\.readFileSourceTable...` | .py, .scala, .sql |
+| BC-16.4-004 | `merge\.materializeSource.*none` | .py, .scala, .sql |
+| BC-16.4-005 | `import\s+org\.json4s` | .scala |
+| BC-16.4-006 | `cloudFiles\.cleanSource` | .py, .scala, .sql |
+| BC-15.4-001 | `VariantType\s*\(` | .py |
+| BC-15.4-002 | `spark\.sql\.legacy\.jdbc\.useNullCalendar` | .py, .scala, .sql |
+| BC-15.4-003 | `(IF\|IS)\s*!(?!\s*=)` | .sql |
+| BC-15.4-003b | `\s!\s*(IN\|BETWEEN\|LIKE\|EXISTS)\b` | .sql |
+| BC-15.4-004 | `CREATE VIEW\s+\w+\s*\(...(INT\|STRING)...` | .sql |
+| BC-15.4-005 | `\.jdbc\s*\(\|\.format\s*\(\s*["']jdbc["']` | .py, .scala |
+| BC-15.4-006 | `CREATE\s+(OR\s+REPLACE\s+)?VIEW\b` | .sql |
+| BC-14.3-001 | `hive\.aux\.jars\.path` | .py, .scala, .sql |
+| BC-13.3-001 | `\bMERGE\s+INTO\b` | .py, .sql, .scala |
+| BC-13.3-002 | `spark\.sql\.parquet\.inferTimestampNTZ` | .py, .scala, .sql |
+| BC-13.3-002b | `\.parquet\s*\(\|\.format\s*\(\s*["']parquet` | .py, .scala |
+| BC-13.3-003 | `overwriteSchema.*true` | .py, .scala |
+| BC-13.3-004 | `spark\.sql\.storeAssignmentPolicy` | .py, .scala, .sql |
 | BC-SC-001 | `except.*AnalysisException` | .py, .scala |
 | BC-SC-002 | Same temp view name used multiple times | .py, .scala |
 | BC-SC-003 | `@udf\s*\(` | .py |
@@ -1125,23 +1428,29 @@ for col_name in cached_columns:
 
 ## Quick Reference: What Gets Auto-Fixed vs Manual Review
 
-| Category | Auto-Fixed | Manual Review |
-|----------|------------|---------------|
-| **BC-17.3-001** | ✅ DataFrame API, SQL strings | Triple-quoted SQL in complex contexts |
-| **BC-13.3-001** | ❌ | ✅ Review type casting in MERGE |
-| **BC-13.3-003** | ❌ | ✅ Review overwriteSchema usage |
-| **BC-15.4-001** | ❌ | ✅ Test on target DBR or use StringType |
-| **BC-15.4-003** | ✅ All `!` → `NOT` patterns | - |
-| **BC-16.4-001a-i** | ✅ All Scala 2.13 changes | BC-16.4-001h (collection.Seq) needs review |
-| **BC-16.4-002** | ❌ | ✅ Review if iteration order matters |
-| **BC-SC-001** | ❌ | ✅ Review exception handling logic |
-| **BC-SC-002** | ❌ | ✅ Flagged for review |
-| **BC-SC-003** | ❌ | ✅ Flagged for review |
-| **BC-SC-004** | ❌ | ✅ Flagged for review |
-| **BC-13.3-002** | ❌ | ⚙️ Config setting |
-| **BC-15.4-002** | ❌ | ⚙️ Config setting |
-| **BC-16.4-004** | ❌ | ⚙️ Config setting |
-| **BC-17.3-002** | ❌ | ⚙️ Config setting |
+| Category | Auto-Fixed | Manual Review | Config |
+|----------|------------|---------------|--------|
+| **BC-17.3-001** | ✅ DataFrame API, SQL | Complex contexts | - |
+| **BC-17.3-002/002b** | - | - | ⚙️ useIncrementalListing |
+| **BC-17.3-003** | - | ✅ Null handling | - |
+| **BC-17.3-005** | - | ✅ Decimal precision | - |
+| **BC-16.4-001a-g, 001i** | ✅ Scala 2.13 fixes | - | - |
+| **BC-16.4-001h** | - | ✅ collection.Seq | - |
+| **BC-16.4-002** | - | ✅ HashMap order | - |
+| **BC-16.4-003** | - | - | ⚙️ Cache options |
+| **BC-16.4-004** | - | - | ⚙️ materializeSource |
+| **BC-16.4-005** | - | ✅ Json4s API | - |
+| **BC-16.4-006** | - | ✅ cleanSource | - |
+| **BC-15.4-001** | - | ✅ VariantType | - |
+| **BC-15.4-003** | ✅ ! → NOT | - | - |
+| **BC-15.4-004** | - | ✅ VIEW types | - |
+| **BC-15.4-005/006** | - | ✅ JDBC/View | - |
+| **BC-14.3-001** | - | ✅ Thriftserver | - |
+| **BC-13.3-001** | - | ✅ MERGE types | - |
+| **BC-13.3-002/002b** | - | - | ⚙️ Timestamp NTZ |
+| **BC-13.3-003** | - | ✅ overwriteSchema | - |
+| **BC-13.3-004** | - | - | ⚙️ Store policy |
+| **BC-SC-001/002/003/004** | - | ✅ Spark Connect | - |
 
 ---
 
@@ -1474,17 +1783,17 @@ python validate-migration.py /path/to/notebooks
 
 ---
 
-## 📊 Summary: Action by Category
+## 📊 Summary: Action by Category (35 Patterns Total)
 
 | Category | Patterns | Primary Action |
 |----------|----------|----------------|
 | **Auto-Fix** | 10 patterns | Run `apply-fixes.py` |
-| **Manual Review** | 12 patterns | Follow guides in this document |
-| **Config Settings** | 4 patterns | Test first, add config only if needed |
+| **Manual Review** | 18 patterns | Follow guides in this document |
+| **Config Settings** | 7 patterns | Test first, add config only if needed |
 
 ### Auto-Fix Patterns (10)
 - BC-17.3-001: `input_file_name()`
-- BC-15.4-003: `!` syntax for NOT
+- BC-15.4-003/003b: `!` syntax for NOT
 - BC-16.4-001a: JavaConverters
 - BC-16.4-001b: `.to[Collection]`
 - BC-16.4-001c: TraversableOnce
@@ -1494,21 +1803,31 @@ python validate-migration.py /path/to/notebooks
 - BC-16.4-001g: `.view.force`
 - BC-16.4-001i: Symbol literals
 
-### Manual Review Patterns (12)
+### Manual Review Patterns (18)
 - BC-13.3-001: MERGE INTO type casting
 - BC-13.3-003: overwriteSchema + dynamic partition
+- BC-14.3-001: Thriftserver config removed
 - BC-15.4-001: VARIANT type in UDF
 - BC-15.4-004: View column type definition
+- BC-15.4-005: JDBC read timestamp handling
+- BC-15.4-006: View schema binding mode
 - BC-16.4-001h: `collection.Seq` import
 - BC-16.4-002: HashMap/HashSet ordering
+- BC-16.4-005: Json4s library version
+- BC-16.4-006: Auto Loader cleanSource
+- BC-17.3-002b: Auto Loader default behavior
+- BC-17.3-003: Spark Connect literal handling
+- BC-17.3-005: Spark Connect decimal precision
 - BC-SC-001: Spark Connect lazy analysis
 - BC-SC-002: Temp view name reuse
 - BC-SC-003: UDF external variable capture
 - BC-SC-004: Schema access in loops
 
-### Config Setting Patterns (4)
-- BC-13.3-002: Parquet Timestamp NTZ
+### Config Setting Patterns (7)
+- BC-13.3-002/002b: Parquet Timestamp NTZ
+- BC-13.3-004: ANSI store assignment policy
 - BC-15.4-002: JDBC useNullCalendar
+- BC-16.4-003: Data source cache options
 - BC-16.4-004: MERGE materializeSource
 - BC-17.3-002: Auto Loader incremental listing
 

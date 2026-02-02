@@ -17,13 +17,13 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 
 ## Agent Capabilities
 
-1. **SCAN** - Find breaking changes in code (23 patterns in scanner script, plus special detection for temp view reuse)
+1. **SCAN** - Find breaking changes in code (32 patterns in scanner script, plus special detection for temp view reuse)
 2. **FIX** - Apply automatic remediations (10 Scala/SQL patterns via apply-fixes.py)
 3. **FLAG** - Explicitly flag items requiring manual review or configuration testing
 4. **VALIDATE** - Verify fixes are correct (12 critical patterns checked)
 5. **SUMMARIZE** - Add a summary markdown cell to the notebook
 
-> **Note:** The full `fix-patterns.json` documents 35 patterns for reference. The scanner script implements 23 regex-based patterns plus special detection for BC-SC-002 (temp view reuse). Some patterns require manual review and cannot be auto-detected.
+> **Note:** The workspace profiler (`developer-guide/workspace-profiler.py`) has the most comprehensive coverage with 35 patterns. The agent scanner implements 32 regex-based patterns plus special detection for BC-SC-002 (temp view reuse).
 
 ---
 

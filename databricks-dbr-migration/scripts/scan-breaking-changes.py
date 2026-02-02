@@ -274,6 +274,107 @@ PATTERNS = [
         "description": "merge.materializeSource=none is no longer allowed",
         "remediation": "Remove merge.materializeSource=none configuration"
     },
+    # Additional patterns from profiler
+    {
+        "id": "BC-13.3-003",
+        "name": "overwriteSchema with Dynamic Partition",
+        "severity": "MEDIUM",
+        "introduced_in": "13.3",
+        "pattern": r"overwriteSchema.*true",
+        "file_types": [".py", ".scala"],
+        "description": "[Review] overwriteSchema=true found - verify not combined with partitionOverwriteMode='dynamic'",
+        "remediation": "If using dynamic partition overwrite, separate into distinct operations"
+    },
+    {
+        "id": "BC-17.3-003",
+        "name": "Spark Connect Literal Handling",
+        "severity": "LOW",
+        "introduced_in": "17.3",
+        "pattern": r"\b(array|map|struct)\s*\(",
+        "file_types": [".py", ".scala"],
+        "description": "[Review] Spark Connect 17.3: null values preserved, decimal precision changed to (38,18)",
+        "remediation": "Handle nulls explicitly with coalesce(); specify decimal precision if needed"
+    },
+    {
+        "id": "BC-17.3-005",
+        "name": "Spark Connect Decimal Precision",
+        "severity": "LOW",
+        "introduced_in": "17.3",
+        "pattern": r"DecimalType\s*\(|\.cast\s*\(\s*[\"']decimal",
+        "file_types": [".py", ".scala"],
+        "description": "[Review] Spark Connect: decimal precision in array/map literals defaults to (38,18)",
+        "remediation": "Specify explicit precision/scale if plan comparison or exact precision required"
+    },
+    {
+        "id": "BC-15.4-006",
+        "name": "View Schema Binding Mode",
+        "severity": "MEDIUM",
+        "introduced_in": "15.4",
+        "pattern": r"CREATE\s+(OR\s+REPLACE\s+)?VIEW\b",
+        "file_types": [".sql"],
+        "description": "[Review] View schema binding default changed from BINDING to schema compensation",
+        "remediation": "Verify view definitions handle underlying table schema changes correctly"
+    },
+    {
+        "id": "BC-16.4-003",
+        "name": "Data Source Cache Options",
+        "severity": "MEDIUM",
+        "introduced_in": "16.4",
+        "pattern": r"spark\.sql\.legacy\.readFileSourceTableCacheIgnoreOptions",
+        "file_types": [".py", ".scala", ".sql", ".conf"],
+        "description": "Table reads now respect options for all cached plans",
+        "remediation": "Set spark.sql.legacy.readFileSourceTableCacheIgnoreOptions=true to restore old behavior"
+    },
+    {
+        "id": "BC-13.3-004",
+        "name": "ANSI Store Assignment Policy",
+        "severity": "LOW",
+        "introduced_in": "13.3",
+        "pattern": r"spark\.sql\.storeAssignmentPolicy",
+        "file_types": [".py", ".scala", ".sql", ".conf"],
+        "description": "[Review] storeAssignmentPolicy default is ANSI - overflow throws error",
+        "remediation": "Ensure MERGE/UPDATE operations handle type casting explicitly"
+    },
+    {
+        "id": "BC-14.3-001",
+        "name": "Thriftserver Config Removed",
+        "severity": "LOW",
+        "introduced_in": "14.3",
+        "pattern": r"hive\.aux\.jars\.path|hive\.server2\.global\.init\.file\.location",
+        "file_types": [".py", ".scala", ".sql", ".conf"],
+        "description": "Hive auxiliary JARs and global init file configs removed",
+        "remediation": "Use cluster init scripts or Unity Catalog volumes for JARs"
+    },
+    {
+        "id": "BC-16.4-005",
+        "name": "Json4s Library Usage",
+        "severity": "LOW",
+        "introduced_in": "16.4",
+        "pattern": r"import\s+org\.json4s",
+        "file_types": [".scala"],
+        "description": "[Review] Json4s downgraded from 4.0.7 to 3.7.0-M11 for Scala 2.13",
+        "remediation": "Review Json4s API usage for compatibility with 3.7.x"
+    },
+    {
+        "id": "BC-16.4-006",
+        "name": "Auto Loader cleanSource Behavior",
+        "severity": "MEDIUM",
+        "introduced_in": "16.4",
+        "pattern": r"cloudFiles\.cleanSource",
+        "file_types": [".py", ".scala", ".sql"],
+        "description": "[Review] cloudFiles.cleanSource behavior changed in 16.4",
+        "remediation": "Review cleanSource settings; behavior for file cleanup may differ"
+    },
+    {
+        "id": "BC-15.4-005",
+        "name": "JDBC Read Timestamp Handling",
+        "severity": "LOW",
+        "introduced_in": "15.4",
+        "pattern": r"\.jdbc\s*\(|\.format\s*\(\s*[\"']jdbc[\"']\s*\)",
+        "file_types": [".py", ".scala"],
+        "description": "[Review] JDBC timestamp handling changed - useNullCalendar default now true",
+        "remediation": "Test timestamp values from JDBC sources; set useNullCalendar=false if issues"
+    },
 ]
 
 
