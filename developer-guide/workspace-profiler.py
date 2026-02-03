@@ -21,6 +21,11 @@
 # MAGIC - Only patterns introduced AFTER your source version will be flagged
 # MAGIC - Example: For 13.3 → 17.3 migration, BC-13.3-xxx patterns are skipped (already working)
 # MAGIC 
+# MAGIC ## Clean Notebook Tracking
+# MAGIC - Set `track_clean_notebooks=True` (default) to include notebooks with no issues
+# MAGIC - Clean notebooks appear with `severity="OK"` and `breaking_change_id="CLEAN"`
+# MAGIC - Helps track which notebooks are ready for upgrade vs which need review
+# MAGIC 
 # MAGIC ## Usage
 # MAGIC 1. Configure the parameters below
 # MAGIC 2. Run all cells
@@ -102,6 +107,9 @@ CONFIG = {
     # Migration path - only patterns introduced AFTER source_dbr_version will be flagged
     "source_dbr_version": "13.3",        # Current DBR version (e.g., "13.3" - patterns <= this are skipped)
     "target_dbr_version": "17.3",        # Target DBR version
+    
+    # Track clean notebooks (no issues found)
+    "track_clean_notebooks": True,       # Include notebooks with no issues in results (severity="OK")
     
     # ============================================================
     # TESTING/DEVELOPMENT LIMITS (set to None for full scan)
@@ -917,7 +925,23 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
                         # Scan for duplicate temp views
                         findings.extend(scan_duplicate_temp_views(content, file_type))
                         
-                        for finding in findings:
+                        if findings:
+                            for finding in findings:
+                                results.append({
+                                    "scan_timestamp": datetime.now().isoformat(),
+                                    "source_type": "JOB",
+                                    "job_id": job.job_id,
+                                    "job_name": job_name,
+                                    "job_link": get_job_link(job.job_id),
+                                    "task_name": task.task_key,
+                                    "notebook_path": notebook_path,
+                                    "notebook_link": get_notebook_link(notebook_path),
+                                    **finding
+                                })
+                            if verbose:
+                                print(f"    → Task '{task.task_key}': {len(findings)} findings")
+                        elif CONFIG.get("track_clean_notebooks", True):
+                            # Track clean notebooks with no issues
                             results.append({
                                 "scan_timestamp": datetime.now().isoformat(),
                                 "source_type": "JOB",
@@ -927,11 +951,17 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
                                 "task_name": task.task_key,
                                 "notebook_path": notebook_path,
                                 "notebook_link": get_notebook_link(notebook_path),
-                                **finding
+                                "breaking_change_id": "CLEAN",
+                                "breaking_change_name": "No Issues Found",
+                                "severity": "OK",
+                                "introduced_in": None,
+                                "line_number": None,
+                                "line_content": None,
+                                "description": "No breaking change patterns detected",
+                                "remediation": "Ready for upgrade"
                             })
-                        
-                        if findings and verbose:
-                            print(f"    → Task '{task.task_key}': {len(findings)} findings")
+                            if verbose:
+                                print(f"    → Task '{task.task_key}': ✅ No issues")
             
             # Save checkpoint for this job
             save_checkpoint(scan_id, "job", job_id_str, job_name, "completed")
@@ -1023,7 +1053,23 @@ def scan_workspace_path(
                             findings = scan_content_for_patterns(content, file_type, APPLICABLE_PATTERNS)
                             findings.extend(scan_duplicate_temp_views(content, file_type))
                             
-                            for finding in findings:
+                            if findings:
+                                for finding in findings:
+                                    results.append({
+                                        "scan_timestamp": datetime.now().isoformat(),
+                                        "source_type": "WORKSPACE",
+                                        "job_id": None,
+                                        "job_name": None,
+                                        "job_link": None,
+                                        "task_name": None,
+                                        "notebook_path": obj.path,
+                                        "notebook_link": get_notebook_link(obj.path),
+                                        **finding
+                                    })
+                                if verbose:
+                                    print(f"    → {len(findings)} findings")
+                            elif CONFIG.get("track_clean_notebooks", True):
+                                # Track clean notebooks with no issues
                                 results.append({
                                     "scan_timestamp": datetime.now().isoformat(),
                                     "source_type": "WORKSPACE",
@@ -1033,11 +1079,17 @@ def scan_workspace_path(
                                     "task_name": None,
                                     "notebook_path": obj.path,
                                     "notebook_link": get_notebook_link(obj.path),
-                                    **finding
+                                    "breaking_change_id": "CLEAN",
+                                    "breaking_change_name": "No Issues Found",
+                                    "severity": "OK",
+                                    "introduced_in": None,
+                                    "line_number": None,
+                                    "line_content": None,
+                                    "description": "No breaking change patterns detected",
+                                    "remediation": "Ready for upgrade"
                                 })
-                            
-                            if findings and verbose:
-                                print(f"    → {len(findings)} findings")
+                                if verbose:
+                                    print(f"    → ✅ No issues")
                         
                         # Save checkpoint for this notebook
                         save_checkpoint(scan_id, "notebook", obj.path, obj.path, "completed")
@@ -1172,8 +1224,23 @@ if CONFIG["scan_workspace"]:
     print(f"Workspace scan complete: {len([r for r in all_results if r['source_type'] == 'WORKSPACE'])} findings")
     print()
 
+# Calculate summary stats
+clean_count = len([r for r in all_results if r.get("severity") == "OK"])
+issue_count = len([r for r in all_results if r.get("severity") != "OK"])
+total_notebooks = len(set(r["notebook_path"] for r in all_results))
+clean_notebooks = len(set(r["notebook_path"] for r in all_results if r.get("severity") == "OK"))
+notebooks_with_issues = total_notebooks - clean_notebooks
+
 print("=" * 60)
-print(f"TOTAL FINDINGS: {len(all_results)}")
+print("SCAN SUMMARY")
+print("=" * 60)
+print(f"Total notebooks scanned: {total_notebooks}")
+print(f"  ✅ Clean (no issues):  {clean_notebooks}")
+print(f"  ⚠️  With issues:        {notebooks_with_issues}")
+print()
+print(f"Total records: {len(all_results)}")
+print(f"  - Issue findings: {issue_count}")
+print(f"  - Clean records:  {clean_count}")
 print("=" * 60)
 
 # COMMAND ----------
@@ -1383,6 +1450,9 @@ def generate_html_report(df) -> str:
     counts = df.groupBy("severity").count().collect()
     count_dict = {row["severity"]: row["count"] for row in counts}
     
+    # Count clean notebooks
+    clean_count = count_dict.get('OK', 0)
+    
     html += f"""
         <div class="summary">
             <div class="summary-card card-high">
@@ -1397,12 +1467,20 @@ def generate_html_report(df) -> str:
                 <div class="card-number">{count_dict.get('LOW', 0)}</div>
                 <div>LOW Severity</div>
             </div>
+            <div class="summary-card" style="background: linear-gradient(135deg, #28a745, #20c997);">
+                <div class="card-number">{clean_count}</div>
+                <div>✅ Clean (No Issues)</div>
+            </div>
         </div>
     """
     
-    # Detailed findings table
+    # Filter for issues (exclude clean notebooks)
+    issues_df = df.filter("severity != 'OK'")
+    clean_df = df.filter("severity = 'OK'")
+    
+    # Detailed findings table (issues only)
     html += """
-        <h2>Detailed Findings</h2>
+        <h2>⚠️ Notebooks With Issues</h2>
         <table>
             <tr>
                 <th>Severity</th>
@@ -1413,7 +1491,7 @@ def generate_html_report(df) -> str:
             </tr>
     """
     
-    for row in df.orderBy("severity", "notebook_path").collect():
+    for row in issues_df.orderBy("severity", "notebook_path").collect():
         html += f"""
             <tr>
                 <td class="severity-{row['severity']}">{row['severity']}</td>
@@ -1426,6 +1504,32 @@ def generate_html_report(df) -> str:
     
     html += """
         </table>
+    """
+    
+    # Clean notebooks section
+    if clean_count > 0:
+        html += """
+        <h2>✅ Clean Notebooks (Ready for Upgrade)</h2>
+        <table>
+            <tr>
+                <th>Notebook</th>
+                <th>Status</th>
+            </tr>
+        """
+        
+        for row in clean_df.select("notebook_path", "notebook_link").distinct().orderBy("notebook_path").collect():
+            html += f"""
+            <tr>
+                <td><a href="{row['notebook_link']}" target="_blank">{row['notebook_path']}</a></td>
+                <td style="color: #28a745; font-weight: bold;">✅ No Issues Found</td>
+            </tr>
+            """
+        
+        html += """
+        </table>
+        """
+    
+    html += """
     </body>
     </html>
     """

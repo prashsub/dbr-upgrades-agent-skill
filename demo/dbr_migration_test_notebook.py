@@ -9,7 +9,7 @@
 # MAGIC | Category | Examples | IDs Included |
 # MAGIC |----------|----------|--------------|
 # MAGIC | 🔴 Auto-Fix | 10 | BC-17.3-001, BC-15.4-003, BC-16.4-001a-i |
-# MAGIC | 🟡 Manual Review | 8 | BC-13.3-001/003, BC-15.4-001/004, BC-SC-001/003/004 |
+# MAGIC | 🟡 Manual Review | 9 | BC-13.3-001/003, BC-15.4-001/004, BC-SC-001/002/003/004 |
 # MAGIC | ⚙️ Config | 4 | BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-17.3-002 |
 # MAGIC 
 # MAGIC ## Usage
@@ -365,6 +365,35 @@ df_mult.select("fare_amount", "adjusted_fare").show(3)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### BC-SC-002: Temp View Name Reuse
+
+# COMMAND ----------
+
+# =============================================================================
+# BC-SC-002: [MANUAL REVIEW] Temp View Name Reuse (Spark Connect)
+# Same view name used multiple times causes conflicts in Spark Connect
+#
+# REVIEW: Check for createOrReplaceTempView with same name used multiple times
+# FIX: Add UUID to view names: f"batch_{uuid.uuid4().hex[:8]}"
+# =============================================================================
+import uuid
+
+# First use of "batch" view name
+df_batch1 = taxi_df.filter(col("fare_amount") > 10)
+df_batch1.createOrReplaceTempView("batch")  # Creates "batch" view
+print(f"First batch: {df_batch1.count()} records")
+
+# Some other processing...
+df_batch2 = taxi_df.filter(col("fare_amount") < 5)
+df_batch2.createOrReplaceTempView("batch")  # REUSES "batch" - PROBLEM!
+print(f"Second batch: {df_batch2.count()} records")
+
+# In Spark Connect, BOTH df_batch1 queries and df_batch2 queries 
+# will see the SAME data (the second one) because they share the view name!
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### BC-SC-004: Schema Access in Loops
 
 # COMMAND ----------
@@ -509,6 +538,7 @@ print(auto_loader_code)
 # MAGIC | BC-16.4-002 | 🟡 Manual | HashMap/HashSet | **FLAG** - Don't rely on order |
 # MAGIC | BC-16.4-001h | 🟡 Manual | `collection.Seq` | **FLAG** - Use explicit type |
 # MAGIC | BC-SC-001 | 🟡 Manual | Lazy schema analysis | **FLAG** - Add `df.columns` for validation |
+# MAGIC | BC-SC-002 | 🟡 Manual | Temp view name reuse | **FLAG** - Add UUID to view names |
 # MAGIC | BC-SC-003 | 🟡 Manual | UDF late binding | **FLAG** - Use function factory pattern |
 # MAGIC | BC-SC-004 | 🟡 Manual | Schema in loop | **FLAG** - Cache columns outside loop |
 # MAGIC | BC-13.3-002 | ⚙️ Config | Parquet timestamp | **FLAG** - Test timestamps first |
@@ -540,7 +570,7 @@ print(auto_loader_code)
 if HELPERS_AVAILABLE:
     bc_ids = [
         "BC-17.3-001", "BC-15.4-003", "BC-15.4-001", "BC-15.4-004",
-        "BC-SC-001", "BC-SC-003", "BC-SC-004",
+        "BC-SC-001", "BC-SC-002", "BC-SC-003", "BC-SC-004",
         "BC-13.3-001", "BC-13.3-002", "BC-13.3-003",
         "BC-15.4-002", "BC-16.4-002", "BC-16.4-004", 
         "BC-17.3-002",
@@ -654,5 +684,5 @@ else:
 
 # Cleanup
 spark.catalog.dropTempView("taxi_trips")
-spark.catalog.dropTempView("current_batch")
+spark.catalog.dropTempView("batch")  # BC-SC-002 example
 print("Cleanup complete!")
