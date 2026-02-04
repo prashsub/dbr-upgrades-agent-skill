@@ -158,7 +158,7 @@ dbutils.widgets.text("workspace_paths", "/", "9. Workspace Paths (comma-separate
 dbutils.widgets.text("exclude_paths", "/Repos,/Shared/Archive", "10. Exclude Paths (comma-separated)")
 
 # --- Migration Path ---
-dbutils.widgets.dropdown("source_dbr_version", "13.3", ["11.3", "12.2", "13.3", "14.3", "15.4", "16.4"], "11. Source DBR Version")
+dbutils.widgets.dropdown("source_dbr_version", "13.3", ["12.2", "13.3", "14.3", "15.4", "16.4"], "11. Source DBR Version")
 dbutils.widgets.dropdown("target_dbr_version", "17.3", ["14.3", "15.4", "16.4", "17.3"], "12. Target DBR Version")
 
 # --- Clean Notebook Tracking ---
