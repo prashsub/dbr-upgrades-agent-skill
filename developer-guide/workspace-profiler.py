@@ -37,41 +37,67 @@
 # MAGIC %md
 # MAGIC ## Configuration
 # MAGIC 
-# MAGIC ### Quick Testing Examples
+# MAGIC ### Interactive Widget Configuration
 # MAGIC 
-# MAGIC **Test with just 5 jobs and 10 notebooks:**
-# MAGIC ```python
-# MAGIC CONFIG["max_jobs"] = 5
-# MAGIC CONFIG["max_notebooks"] = 10
-# MAGIC ```
+# MAGIC All configuration parameters are available as **interactive widgets** at the top of this notebook.
+# MAGIC Simply modify the widget values in the UI - no code changes required!
 # MAGIC 
-# MAGIC **Dry run to count files without scanning:**
-# MAGIC ```python
-# MAGIC CONFIG["dry_run"] = True
-# MAGIC ```
+# MAGIC > **Widget Reference:** [Databricks Widgets Documentation](https://learn.microsoft.com/en-us/azure/databricks/notebooks/widgets)
 # MAGIC 
-# MAGIC **Scan specific folder only:**
-# MAGIC ```python
-# MAGIC CONFIG["scan_jobs"] = False
-# MAGIC CONFIG["workspace_paths"] = ["/Users/your.name/project"]
-# MAGIC CONFIG["max_notebooks"] = 20
-# MAGIC ```
+# MAGIC ### Key Configuration Options
+# MAGIC 
+# MAGIC | Widget | Description | Default |
+# MAGIC |--------|-------------|---------|
+# MAGIC | **Filter Jobs by Activity** | Only scan jobs that have run recently | True |
+# MAGIC | **Job Activity Days** | How many days to look back for job runs | 365 |
+# MAGIC | **Jobs-Only Mode** | Skip standalone notebooks not used by jobs | False |
+# MAGIC | **Include Nested Notebooks** | Follow `%run` and `dbutils.notebook.run()` calls | True |
+# MAGIC | **Source/Target DBR Version** | Define migration path for pattern filtering | 13.3 → 17.3 |
+# MAGIC | **Max Jobs/Notebooks** | Limit scan for testing (empty = scan all) | empty |
+# MAGIC | **Dry Run** | Count files without scanning content | False |
+# MAGIC 
+# MAGIC ### Common Configuration Scenarios
+# MAGIC 
+# MAGIC **1. Full Production Scan (Recommended):**
+# MAGIC - Filter Jobs by Activity: `True`
+# MAGIC - Job Activity Days: `365`
+# MAGIC - Jobs-Only Mode: `True`
+# MAGIC - Include Nested Notebooks: `True`
+# MAGIC 
+# MAGIC **2. Quick Test Run:**
+# MAGIC - Max Jobs: `5`
+# MAGIC - Max Notebooks: `10`
+# MAGIC - Dry Run: `False`
+# MAGIC 
+# MAGIC **3. Scan Specific Folder Only:**
+# MAGIC - Scan Jobs: `False`
+# MAGIC - Workspace Paths: `/Users/your.name/project`
+# MAGIC 
+# MAGIC **4. Count Files Without Scanning:**
+# MAGIC - Dry Run: `True`
+# MAGIC 
+# MAGIC ### System Table Filtering
+# MAGIC 
+# MAGIC Job activity filtering uses `system.lakeflow.job_run_timeline` to identify jobs that have actually run.
+# MAGIC > **Reference:** [Jobs System Tables](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/jobs)
+# MAGIC 
+# MAGIC ### Nested Notebook Resolution
+# MAGIC 
+# MAGIC When **Include Nested Notebooks** is enabled, the profiler follows:
+# MAGIC - `%run ./path/to/notebook` (inline execution)
+# MAGIC - `dbutils.notebook.run("path", timeout, args)` (ephemeral job)
+# MAGIC 
+# MAGIC > **Reference:** [Orchestrate notebooks and modularize code](https://learn.microsoft.com/en-us/azure/databricks/notebooks/notebook-workflows)
 # MAGIC 
 # MAGIC ### Checkpointing (Resume Failed Scans)
 # MAGIC 
-# MAGIC **Enable checkpointing (default):**
-# MAGIC ```python
-# MAGIC CONFIG["enable_checkpointing"] = True
-# MAGIC CONFIG["checkpoint_table"] = "scan_checkpoint"  # Table in same catalog.schema
-# MAGIC ```
-# MAGIC 
-# MAGIC **Resume a failed scan:**
+# MAGIC Checkpointing is enabled by default. To resume a failed scan:
 # MAGIC ```python
 # MAGIC # Find the scan_id from the failed run's output, then set it before running:
 # MAGIC SCAN_ID = "20260125_143022"  # Replace with actual scan_id from failed run
 # MAGIC ```
 # MAGIC 
-# MAGIC **Clear checkpoints and start fresh:**
+# MAGIC To clear checkpoints and start fresh:
 # MAGIC ```python
 # MAGIC clear_checkpoint()  # Clears all
 # MAGIC # or
@@ -80,52 +106,165 @@
 
 # COMMAND ----------
 
-# Configuration - Modify these as needed
+# MAGIC %md
+# MAGIC ## Interactive Configuration (Widgets)
+# MAGIC 
+# MAGIC All configuration parameters are available as **interactive widgets** at the top of this notebook.
+# MAGIC You can modify them directly in the UI without editing code.
+# MAGIC 
+# MAGIC **Widget Reference:** [Databricks Widgets Documentation](https://learn.microsoft.com/en-us/azure/databricks/notebooks/widgets)
+
+# COMMAND ----------
+
+# ============================================================
+# CREATE CONFIGURATION WIDGETS
+# ============================================================
+# These widgets appear at the top of the notebook for easy configuration.
+# All parameters can be changed interactively without editing code.
+
+# --- Helper functions for widget value parsing ---
+def _parse_bool(value: str) -> bool:
+    """Parse string to boolean."""
+    return value.lower() in ('true', 'yes', '1', 'on')
+
+def _parse_int_or_none(value: str) -> int:
+    """Parse string to int, return None if empty or 'None'."""
+    if not value or value.lower() == 'none' or value.strip() == '':
+        return None
+    return int(value)
+
+def _parse_list(value: str) -> list:
+    """Parse comma-separated string to list."""
+    if not value or value.strip() == '':
+        return []
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+# --- Output Settings ---
+dbutils.widgets.text("output_catalog", "main", "1. Output Catalog")
+dbutils.widgets.text("output_schema", "dbr_migration", "2. Output Schema")
+dbutils.widgets.text("output_table", "scan_results", "3. Output Table")
+dbutils.widgets.dropdown("truncate_on_scan", "True", ["True", "False"], "4. Truncate Before Scan")
+
+# --- CSV Export ---
+dbutils.widgets.dropdown("export_csv", "True", ["True", "False"], "5. Export to CSV")
+dbutils.widgets.text("csv_path", "/Volumes/main/dbr_migration/exports/scan_results.csv", "6. CSV Export Path")
+
+# --- Scan Scope ---
+dbutils.widgets.dropdown("scan_jobs", "True", ["True", "False"], "7. Scan Jobs")
+dbutils.widgets.dropdown("scan_workspace", "True", ["True", "False"], "8. Scan Workspace")
+dbutils.widgets.text("workspace_paths", "/", "9. Workspace Paths (comma-separated)")
+
+# --- Filtering ---
+dbutils.widgets.text("exclude_paths", "/Repos,/Shared/Archive", "10. Exclude Paths (comma-separated)")
+
+# --- Migration Path ---
+dbutils.widgets.dropdown("source_dbr_version", "13.3", ["11.3", "12.2", "13.3", "14.3", "15.4", "16.4"], "11. Source DBR Version")
+dbutils.widgets.dropdown("target_dbr_version", "17.3", ["14.3", "15.4", "16.4", "17.3"], "12. Target DBR Version")
+
+# --- Clean Notebook Tracking ---
+dbutils.widgets.dropdown("track_clean_notebooks", "True", ["True", "False"], "13. Track Clean Notebooks")
+
+# --- Job Filtering (System Tables) ---
+dbutils.widgets.dropdown("filter_jobs_by_activity", "True", ["True", "False"], "14. Filter Jobs by Activity")
+dbutils.widgets.text("job_activity_days", "365", "15. Job Activity Days")
+
+# --- Jobs-Only Mode ---
+dbutils.widgets.dropdown("jobs_only_mode", "False", ["True", "False"], "16. Jobs-Only Mode")
+
+# --- Nested Notebook Resolution ---
+dbutils.widgets.dropdown("include_nested_notebooks", "True", ["True", "False"], "17. Include Nested Notebooks")
+dbutils.widgets.text("max_nested_depth", "10", "18. Max Nested Depth")
+
+# --- Testing/Development Limits ---
+dbutils.widgets.text("max_jobs", "", "19. Max Jobs (empty=all)")
+dbutils.widgets.text("max_notebooks", "", "20. Max Notebooks (empty=all)")
+dbutils.widgets.dropdown("dry_run", "False", ["True", "False"], "21. Dry Run")
+dbutils.widgets.dropdown("verbose", "True", ["True", "False"], "22. Verbose Output")
+
+# --- Checkpointing ---
+dbutils.widgets.dropdown("enable_checkpointing", "True", ["True", "False"], "23. Enable Checkpointing")
+dbutils.widgets.text("checkpoint_table", "scan_checkpoint", "24. Checkpoint Table")
+
+# COMMAND ----------
+
+# ============================================================
+# BUILD CONFIG FROM WIDGETS
+# ============================================================
+# Read all widget values and construct the CONFIG dictionary.
+# This allows interactive configuration through the widget UI.
+
 CONFIG = {
     # Output settings
-    "output_catalog": "main",           # Unity Catalog name
-    "output_schema": "dbr_migration",   # Schema name
-    "output_table": "scan_results",     # Table name
-    "truncate_on_scan": True,           # Truncate table before each scan (avoids duplicates on re-runs)
+    "output_catalog": dbutils.widgets.get("output_catalog"),
+    "output_schema": dbutils.widgets.get("output_schema"),
+    "output_table": dbutils.widgets.get("output_table"),
+    "truncate_on_scan": _parse_bool(dbutils.widgets.get("truncate_on_scan")),
     
     # Optional CSV export
-    "export_csv": True,
-    "csv_path": "/Volumes/main/dbr_migration/exports/scan_results.csv",
+    "export_csv": _parse_bool(dbutils.widgets.get("export_csv")),
+    "csv_path": dbutils.widgets.get("csv_path"),
     
     # Scan scope
-    "scan_jobs": True,                  # Scan job notebooks
-    "scan_workspace": True,             # Scan workspace notebooks
-    "workspace_paths": ["/"],           # Paths to scan (use ["/"] for entire workspace)
+    "scan_jobs": _parse_bool(dbutils.widgets.get("scan_jobs")),
+    "scan_workspace": _parse_bool(dbutils.widgets.get("scan_workspace")),
+    "workspace_paths": _parse_list(dbutils.widgets.get("workspace_paths")) or ["/"],
     
     # Filtering
-    "exclude_paths": [
-        "/Repos",                       # Exclude Repos (usually version controlled)
-        "/Shared/Archive",              # Exclude archived notebooks
-    ],
-    "file_extensions": [".py", ".sql", ".scala"],
+    "exclude_paths": _parse_list(dbutils.widgets.get("exclude_paths")),
+    "file_extensions": [".py", ".sql", ".scala"],  # Not configurable via widget (rarely changed)
     
-    # Migration path - only patterns introduced AFTER source_dbr_version will be flagged
-    "source_dbr_version": "13.3",        # Current DBR version (e.g., "13.3" - patterns <= this are skipped)
-    "target_dbr_version": "17.3",        # Target DBR version
+    # Migration path
+    "source_dbr_version": dbutils.widgets.get("source_dbr_version"),
+    "target_dbr_version": dbutils.widgets.get("target_dbr_version"),
     
-    # Track clean notebooks (no issues found)
-    "track_clean_notebooks": True,       # Include notebooks with no issues in results (severity="OK")
+    # Track clean notebooks
+    "track_clean_notebooks": _parse_bool(dbutils.widgets.get("track_clean_notebooks")),
     
-    # ============================================================
-    # TESTING/DEVELOPMENT LIMITS (set to None for full scan)
-    # ============================================================
-    "max_jobs": None,                   # Max jobs to scan (e.g., 5 for testing, None for all)
-    "max_notebooks": None,              # Max notebooks to scan per workspace path (e.g., 10 for testing)
-    "dry_run": False,                   # If True, just count files without scanning content
-    "verbose": True,                    # Print detailed progress
+    # Job filtering (System Tables)
+    "filter_jobs_by_activity": _parse_bool(dbutils.widgets.get("filter_jobs_by_activity")),
+    "job_activity_days": int(dbutils.widgets.get("job_activity_days") or "365"),
     
-    # ============================================================
-    # CHECKPOINTING (for resumable scans)
-    # ============================================================
-    "enable_checkpointing": True,       # Enable checkpoint to resume failed scans
-    "checkpoint_table": "scan_checkpoint",  # Table name for checkpoints (in same catalog.schema)
-    "checkpoint_batch_size": 10,        # Save checkpoint every N items scanned
+    # Jobs-only mode
+    "jobs_only_mode": _parse_bool(dbutils.widgets.get("jobs_only_mode")),
+    
+    # Nested notebook resolution
+    "include_nested_notebooks": _parse_bool(dbutils.widgets.get("include_nested_notebooks")),
+    "max_nested_depth": int(dbutils.widgets.get("max_nested_depth") or "10"),
+    
+    # Testing/Development limits
+    "max_jobs": _parse_int_or_none(dbutils.widgets.get("max_jobs")),
+    "max_notebooks": _parse_int_or_none(dbutils.widgets.get("max_notebooks")),
+    "dry_run": _parse_bool(dbutils.widgets.get("dry_run")),
+    "verbose": _parse_bool(dbutils.widgets.get("verbose")),
+    
+    # Checkpointing
+    "enable_checkpointing": _parse_bool(dbutils.widgets.get("enable_checkpointing")),
+    "checkpoint_table": dbutils.widgets.get("checkpoint_table"),
+    "checkpoint_batch_size": 10,  # Not configurable via widget (internal setting)
 }
+
+# Display current configuration
+print("=" * 60)
+print("CURRENT CONFIGURATION (from widgets)")
+print("=" * 60)
+for key, value in CONFIG.items():
+    print(f"  {key}: {value}")
+print("=" * 60)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Reset Widgets to Defaults (Optional)
+# MAGIC 
+# MAGIC Uncomment and run the cell below to reset all widgets to their default values.
+
+# COMMAND ----------
+
+# # UNCOMMENT TO RESET ALL WIDGETS TO DEFAULTS
+# # This removes all widgets and re-runs the notebook to recreate them with default values
+# 
+# dbutils.widgets.removeAll()
+# print("All widgets removed. Re-run the notebook to recreate widgets with default values.")
 
 # COMMAND ----------
 
@@ -135,7 +274,8 @@ CONFIG = {
 # COMMAND ----------
 
 import re
-from typing import List, Dict, Tuple, Optional
+import os
+from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
@@ -683,6 +823,436 @@ def clear_checkpoint(scan_id: str = None):
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Job System Table Functions
+# MAGIC 
+# MAGIC Query `system.lakeflow.job_run_timeline` to find jobs that have been executed recently.
+# MAGIC This enables filtering to only scan active/relevant jobs.
+
+# COMMAND ----------
+
+def get_active_job_ids_from_system_tables(days: int = 365) -> set:
+    """
+    Query system.lakeflow.job_run_timeline to get job IDs that have been executed
+    within the specified number of days.
+    
+    Args:
+        days: Number of days to look back for job activity (default: 365)
+    
+    Returns:
+        Set of (workspace_id, job_id) tuples for active jobs
+    
+    Note: Uses system.lakeflow.job_run_timeline which tracks job runs and metadata.
+    Reference: https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/jobs
+    """
+    try:
+        # Query job_run_timeline for jobs with recent activity
+        # We use period_start_time to filter for jobs that have actually run
+        query = f"""
+        SELECT DISTINCT
+            workspace_id,
+            job_id
+        FROM system.lakeflow.job_run_timeline
+        WHERE 
+            period_start_time >= CURRENT_TIMESTAMP() - INTERVAL {days} DAYS
+            AND run_type = 'JOB_RUN'  -- Only standard job executions, not SUBMIT_RUN or WORKFLOW_RUN
+        """
+        
+        df = spark.sql(query)
+        active_jobs = set()
+        
+        for row in df.collect():
+            # Store as string for consistent comparison
+            active_jobs.add(str(row.job_id))
+        
+        return active_jobs
+        
+    except Exception as e:
+        print(f"⚠️ Warning: Could not query system.lakeflow.job_run_timeline: {e}")
+        print("   Falling back to scanning all jobs (no activity filter applied)")
+        return None  # Return None to indicate fallback to scanning all
+
+
+def get_active_jobs_with_metadata(days: int = 365) -> dict:
+    """
+    Query system tables to get active jobs with their metadata.
+    
+    Args:
+        days: Number of days to look back for job activity
+    
+    Returns:
+        Dictionary mapping job_id to job metadata including:
+        - last_run_time: Most recent run timestamp
+        - run_count: Number of runs in the period
+        - result_states: Set of result states from runs
+    """
+    try:
+        query = f"""
+        WITH job_activity AS (
+            SELECT
+                job_id,
+                MAX(period_end_time) as last_run_time,
+                COUNT(DISTINCT run_id) as run_count,
+                COLLECT_SET(result_state) as result_states
+            FROM system.lakeflow.job_run_timeline
+            WHERE 
+                period_start_time >= CURRENT_TIMESTAMP() - INTERVAL {days} DAYS
+                AND run_type = 'JOB_RUN'
+            GROUP BY job_id
+        )
+        SELECT * FROM job_activity
+        """
+        
+        df = spark.sql(query)
+        jobs_metadata = {}
+        
+        for row in df.collect():
+            jobs_metadata[str(row.job_id)] = {
+                "last_run_time": row.last_run_time,
+                "run_count": row.run_count,
+                "result_states": list(row.result_states) if row.result_states else []
+            }
+        
+        return jobs_metadata
+        
+    except Exception as e:
+        print(f"⚠️ Warning: Could not query job metadata from system tables: {e}")
+        return {}
+
+
+def print_job_activity_summary(active_jobs: set, total_jobs: int, days: int):
+    """Print a summary of job activity filtering."""
+    if active_jobs is None:
+        print(f"  ℹ️ System tables not available - scanning all {total_jobs} jobs")
+    else:
+        filtered_count = len(active_jobs)
+        skipped_count = total_jobs - filtered_count
+        print(f"  📊 Job Activity Filter (last {days} days):")
+        print(f"     - Total jobs in workspace: {total_jobs}")
+        print(f"     - Jobs with recent runs:   {filtered_count}")
+        print(f"     - Jobs skipped (inactive): {skipped_count}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Notebook Dependency Resolution
+# MAGIC 
+# MAGIC Parse notebooks to find nested notebook calls and resolve the full dependency tree.
+# MAGIC 
+# MAGIC **Supported patterns:**
+# MAGIC - `%run ./path/to/notebook` - Inline notebook execution (functions/variables become available)
+# MAGIC - `%run /absolute/path/notebook` - Absolute path %run
+# MAGIC - `dbutils.notebook.run("path", timeout)` - Starts ephemeral job (Python)
+# MAGIC - `dbutils.notebook.run("path", 60, Map(...))` - With arguments (Scala)
+# MAGIC 
+# MAGIC **Reference:** [Orchestrate notebooks and modularize code](https://learn.microsoft.com/en-us/azure/databricks/notebooks/notebook-workflows)
+
+# COMMAND ----------
+
+def extract_run_references(content: str, current_notebook_path: str) -> List[str]:
+    """
+    Extract notebook paths referenced via %run magic commands.
+    
+    The %run command includes another notebook within the current notebook,
+    making all functions and variables from the called notebook available.
+    
+    Handles various %run formats:
+    - %run ./relative_notebook
+    - %run ../parent_folder/notebook
+    - %run /absolute/path/notebook
+    - %run "/path/with spaces/notebook"
+    - %run $variable (skipped - can't resolve dynamically)
+    
+    Note: %run must be in a cell by itself and runs the entire notebook inline.
+    Reference: https://learn.microsoft.com/en-us/azure/databricks/notebooks/notebook-workflows#run
+    
+    Args:
+        content: Notebook content as string
+        current_notebook_path: Path of the current notebook (for resolving relative paths)
+    
+    Returns:
+        List of resolved notebook paths
+    """
+    references = []
+    
+    # Pattern to match %run commands
+    # Handles: %run path, %run "path", %run 'path'
+    run_pattern = re.compile(
+        r'%run\s+'
+        r'(?:'
+        r'"([^"]+)"'           # Double-quoted path
+        r'|'
+        r"'([^']+)'"           # Single-quoted path
+        r'|'
+        r'(\S+)'               # Unquoted path (no spaces)
+        r')',
+        re.IGNORECASE
+    )
+    
+    for match in run_pattern.finditer(content):
+        # Get the matched path (from whichever group matched)
+        path = match.group(1) or match.group(2) or match.group(3)
+        
+        if not path:
+            continue
+        
+        # Skip variable references (can't resolve dynamically)
+        if path.startswith('$') or '{' in path:
+            continue
+        
+        # Skip if accidentally matched something else
+        if 'dbutils' in path.lower():
+            continue
+        
+        resolved_path = _resolve_notebook_path(path, current_notebook_path)
+        if resolved_path and resolved_path not in references:
+            references.append(resolved_path)
+    
+    return references
+
+
+def extract_dbutils_notebook_run_references(content: str, current_notebook_path: str) -> List[str]:
+    """
+    Extract notebook paths from dbutils.notebook.run() calls.
+    
+    Handles (Python):
+    - dbutils.notebook.run("path", timeout)
+    - dbutils.notebook.run("path", 60, {"argument": "data"})
+    - dbutils.notebook.run('/path/to/notebook', timeout)
+    
+    Handles (Scala):
+    - dbutils.notebook.run("path", 60)
+    - dbutils.notebook.run("path", 60, Map("argument" -> "data"))
+    
+    Reference: https://learn.microsoft.com/en-us/azure/databricks/notebooks/notebook-workflows#notebook-run
+    
+    Note: Variable paths (e.g., dbutils.notebook.run(notebook_path, ...)) cannot be resolved.
+    
+    Args:
+        content: Notebook content as string
+        current_notebook_path: Path of the current notebook (for resolving relative paths)
+    
+    Returns:
+        List of resolved notebook paths
+    """
+    references = []
+    
+    # Pattern for dbutils.notebook.run with string literal path
+    # Handles both Python and Scala syntax
+    # Examples:
+    #   dbutils.notebook.run("notebook-name", 60, {"argument": "data"})
+    #   dbutils.notebook.run("notebook-name", 60, Map("argument" -> "data"))
+    run_patterns = [
+        # Standard pattern: dbutils.notebook.run("path", ...)
+        re.compile(
+            r'dbutils\.notebook\.run\s*\(\s*'
+            r'(?:'
+            r'"([^"]+)"'           # Double-quoted path
+            r'|'
+            r"'([^']+)'"           # Single-quoted path
+            r')',
+            re.IGNORECASE
+        ),
+        # Pattern with f-string prefix (to detect and skip): f"..." or f'...'
+        re.compile(
+            r'dbutils\.notebook\.run\s*\(\s*f["\']',
+            re.IGNORECASE
+        ),
+        # Pattern for triple-quoted strings
+        re.compile(
+            r'dbutils\.notebook\.run\s*\(\s*'
+            r'(?:'
+            r'"""([^"]+)"""'       # Triple double-quoted path
+            r'|'
+            r"'''([^']+)'''"       # Triple single-quoted path
+            r')',
+            re.IGNORECASE
+        ),
+    ]
+    
+    # Main pattern for extracting paths
+    main_pattern = run_patterns[0]
+    triple_quote_pattern = run_patterns[2]
+    
+    # First, try standard quotes
+    for match in main_pattern.finditer(content):
+        path = match.group(1) or match.group(2)
+        
+        if not path:
+            continue
+        
+        # Skip if it looks like a variable, f-string, or concatenation
+        if '{' in path or path.startswith('$') or '+' in path:
+            continue
+        
+        # Skip if path contains escape sequences that look like variables
+        if '\\' in path and any(c in path for c in ['n', 't', 'r']):
+            # Might be legitimate escape, keep it
+            pass
+        
+        resolved_path = _resolve_notebook_path(path, current_notebook_path)
+        if resolved_path and resolved_path not in references:
+            references.append(resolved_path)
+    
+    # Also try triple-quoted strings (less common but valid)
+    for match in triple_quote_pattern.finditer(content):
+        path = match.group(1) or match.group(2)
+        
+        if not path:
+            continue
+        
+        if '{' in path or path.startswith('$'):
+            continue
+        
+        resolved_path = _resolve_notebook_path(path, current_notebook_path)
+        if resolved_path and resolved_path not in references:
+            references.append(resolved_path)
+    
+    return references
+
+
+def _resolve_notebook_path(path: str, current_notebook_path: str) -> Optional[str]:
+    """
+    Resolve a notebook path (relative or absolute) to an absolute workspace path.
+    
+    Args:
+        path: The notebook path (may be relative)
+        current_notebook_path: The path of the current notebook (for resolving relative paths)
+    
+    Returns:
+        Resolved absolute path, or None if path cannot be resolved
+    """
+    if not path or not path.strip():
+        return None
+    
+    path = path.strip()
+    
+    # Skip if it looks like a variable or f-string interpolation
+    if '{' in path or path.startswith('$'):
+        return None
+    
+    # Resolve relative paths
+    if path.startswith('./') or path.startswith('../'):
+        current_dir = os.path.dirname(current_notebook_path)
+        resolved_path = os.path.normpath(os.path.join(current_dir, path))
+    elif not path.startswith('/'):
+        # Relative path without ./ prefix - treat as same directory
+        current_dir = os.path.dirname(current_notebook_path)
+        resolved_path = os.path.normpath(os.path.join(current_dir, path))
+    else:
+        # Absolute path
+        resolved_path = path
+    
+    # Normalize path separators for workspace paths
+    resolved_path = resolved_path.replace('\\', '/')
+    
+    return resolved_path
+
+
+def resolve_notebook_dependencies(
+    notebook_path: str, 
+    visited: set = None,
+    depth: int = 0,
+    max_depth: int = 10,
+    verbose: bool = False
+) -> set:
+    """
+    Recursively resolve all notebook dependencies via %run and dbutils.notebook.run.
+    
+    Args:
+        notebook_path: Path to the notebook to analyze
+        visited: Set of already visited notebooks (prevents cycles)
+        depth: Current recursion depth
+        max_depth: Maximum recursion depth to prevent infinite loops
+        verbose: Print debug information
+    
+    Returns:
+        Set of all notebook paths that are dependencies (including the original)
+    """
+    if visited is None:
+        visited = set()
+    
+    # Prevent cycles and infinite recursion
+    if notebook_path in visited or depth > max_depth:
+        return visited
+    
+    visited.add(notebook_path)
+    
+    try:
+        content, file_type = export_notebook(notebook_path)
+        
+        if not content:
+            return visited
+        
+        # Extract %run references
+        run_refs = extract_run_references(content, notebook_path)
+        
+        # Extract dbutils.notebook.run references
+        dbutils_refs = extract_dbutils_notebook_run_references(content, notebook_path)
+        
+        all_refs = list(set(run_refs + dbutils_refs))
+        
+        if verbose and all_refs:
+            indent = "  " * depth
+            print(f"{indent}📎 {notebook_path} references {len(all_refs)} notebook(s)")
+        
+        # Recursively resolve dependencies
+        for ref_path in all_refs:
+            if ref_path not in visited:
+                resolve_notebook_dependencies(
+                    ref_path, 
+                    visited, 
+                    depth + 1, 
+                    max_depth,
+                    verbose
+                )
+    
+    except Exception as e:
+        if verbose:
+            print(f"  ⚠️ Could not resolve dependencies for {notebook_path}: {e}")
+    
+    return visited
+
+
+def collect_job_notebook_dependencies(job_notebooks: List[str], verbose: bool = False) -> set:
+    """
+    Collect all notebooks that are directly or indirectly referenced by job tasks.
+    
+    Args:
+        job_notebooks: List of notebook paths from job tasks
+        verbose: Print progress information
+    
+    Returns:
+        Set of all notebook paths including dependencies
+    """
+    all_notebooks = set()
+    max_depth = CONFIG.get("max_nested_depth", 10)
+    
+    if verbose:
+        print(f"  🔍 Resolving notebook dependencies (max depth: {max_depth})...")
+    
+    for notebook_path in job_notebooks:
+        dependencies = resolve_notebook_dependencies(
+            notebook_path,
+            visited=set(),
+            max_depth=max_depth,
+            verbose=verbose
+        )
+        all_notebooks.update(dependencies)
+    
+    if verbose:
+        direct_count = len(job_notebooks)
+        total_count = len(all_notebooks)
+        nested_count = total_count - direct_count
+        print(f"  📊 Notebook dependency summary:")
+        print(f"     - Direct job notebooks:    {direct_count}")
+        print(f"     - Nested dependencies:     {nested_count}")
+        print(f"     - Total notebooks to scan: {total_count}")
+    
+    return all_notebooks
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Scanning Functions
 
 # COMMAND ----------
@@ -851,7 +1421,15 @@ def export_notebook(path: str) -> Tuple[str, str]:
 
 # COMMAND ----------
 
-def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, verbose: bool = True) -> List[Dict]:
+def scan_all_jobs(
+    scan_id: str, 
+    max_jobs: int = None, 
+    dry_run: bool = False, 
+    verbose: bool = True,
+    filter_by_activity: bool = False,
+    activity_days: int = 365,
+    collect_notebooks_only: bool = False
+) -> Tuple[List[Dict], List[str]]:
     """
     Scan all jobs in the workspace for breaking changes.
     
@@ -860,23 +1438,44 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
         max_jobs: Maximum number of jobs to scan (None for all)
         dry_run: If True, just count jobs without scanning content
         verbose: Print detailed progress
+        filter_by_activity: If True, only scan jobs that have run within activity_days
+        activity_days: Number of days to look back for job activity (default: 365)
+        collect_notebooks_only: If True, only collect notebook paths without scanning
+    
+    Returns:
+        Tuple of (scan_results, job_notebook_paths)
+        - scan_results: List of finding dictionaries
+        - job_notebook_paths: List of notebook paths from job tasks (for dependency resolution)
     """
     results = []
+    job_notebook_paths = []  # Track all notebooks referenced by jobs
     checkpoint_batch = []
     
     print("Fetching jobs...")
     jobs = list(w.jobs.list())
     total_jobs = len(jobs)
     
+    # Filter jobs by activity using system tables
+    active_job_ids = None
+    if filter_by_activity:
+        print(f"  Querying system.lakeflow.job_run_timeline for jobs active in last {activity_days} days...")
+        active_job_ids = get_active_job_ids_from_system_tables(activity_days)
+        print_job_activity_summary(active_job_ids, total_jobs, activity_days)
+        
+        if active_job_ids is not None:
+            # Filter jobs list to only include active jobs
+            jobs = [j for j in jobs if str(j.job_id) in active_job_ids]
+            print(f"  Filtered to {len(jobs)} active jobs")
+    
     if max_jobs:
         jobs = jobs[:max_jobs]
         print(f"Found {total_jobs} jobs, limiting to {max_jobs} for testing")
     else:
-        print(f"Found {total_jobs} jobs")
+        print(f"Found {len(jobs)} jobs to scan")
     
     if dry_run:
         print(f"[DRY RUN] Would scan {len(jobs)} jobs")
-        return []
+        return [], []
     
     # Get already completed jobs from checkpoint
     completed_jobs = get_completed_items(scan_id, "job")
@@ -887,8 +1486,8 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
     for idx, job in enumerate(jobs, 1):
         job_id_str = str(job.job_id)
         
-        # Skip if already scanned (checkpoint)
-        if job_id_str in completed_jobs:
+        # Skip if already scanned (checkpoint) - but still collect notebook paths if in collect_only mode
+        if job_id_str in completed_jobs and not collect_notebooks_only:
             skipped += 1
             continue
         
@@ -897,9 +1496,11 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
             job_details = w.jobs.get(job.job_id)
             job_name = job_details.settings.name if job_details.settings else f"Job {job.job_id}"
             
-            if verbose:
+            if verbose and not collect_notebooks_only:
                 resumed_info = f" (resumed, skipped {skipped})" if skipped > 0 and idx == skipped + 1 else ""
                 print(f"  [{idx}/{len(jobs)}] Scanning job: {job_name[:50]}...{resumed_info}")
+            elif verbose and collect_notebooks_only and idx == 1:
+                print(f"  Collecting notebook paths from {len(jobs)} jobs...")
             
             # Get tasks
             tasks = job_details.settings.tasks if job_details.settings and job_details.settings.tasks else []
@@ -917,6 +1518,14 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
                     continue
                 
                 if notebook_path:
+                    # Always collect notebook paths for dependency resolution
+                    if notebook_path not in job_notebook_paths:
+                        job_notebook_paths.append(notebook_path)
+                    
+                    # Skip actual scanning if we're only collecting notebook paths
+                    if collect_notebooks_only:
+                        continue
+                    
                     content, file_type = export_notebook(notebook_path)
                     if content:
                         # Scan for patterns (filtered for migration path)
@@ -963,13 +1572,150 @@ def scan_all_jobs(scan_id: str, max_jobs: int = None, dry_run: bool = False, ver
                             if verbose:
                                 print(f"    → Task '{task.task_key}': ✅ No issues")
             
-            # Save checkpoint for this job
-            save_checkpoint(scan_id, "job", job_id_str, job_name, "completed")
+            # Save checkpoint for this job (skip if only collecting notebooks)
+            if not collect_notebooks_only:
+                save_checkpoint(scan_id, "job", job_id_str, job_name, "completed")
             
         except Exception as e:
             print(f"Warning: Could not scan job {job.job_id}: {e}")
-            # Save failed checkpoint
-            save_checkpoint(scan_id, "job", job_id_str, str(job.job_id), "failed", str(e))
+            # Save failed checkpoint (skip if only collecting notebooks)
+            if not collect_notebooks_only:
+                save_checkpoint(scan_id, "job", job_id_str, str(job.job_id), "failed", str(e))
+    
+    if verbose and collect_notebooks_only:
+        print(f"  Found {len(job_notebook_paths)} unique notebooks from job tasks")
+    
+    return results, job_notebook_paths
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Scan Job-Related Notebooks (Including Dependencies)
+
+# COMMAND ----------
+
+def scan_job_notebooks_with_dependencies(
+    scan_id: str,
+    job_notebooks: List[str],
+    include_nested: bool = True,
+    max_nested_depth: int = 10,
+    dry_run: bool = False,
+    verbose: bool = True
+) -> List[Dict]:
+    """
+    Scan notebooks that are part of jobs, including nested dependencies via %run.
+    
+    This function:
+    1. Takes the list of notebook paths from job tasks
+    2. Resolves all %run and dbutils.notebook.run dependencies
+    3. Scans all notebooks (direct and nested) for breaking changes
+    
+    Args:
+        scan_id: Unique identifier for this scan (for checkpointing)
+        job_notebooks: List of notebook paths from job tasks
+        include_nested: If True, include notebooks referenced via %run
+        max_nested_depth: Maximum depth for dependency resolution
+        dry_run: If True, just count notebooks without scanning
+        verbose: Print detailed progress
+    
+    Returns:
+        List of finding dictionaries
+    """
+    results = []
+    
+    print(f"Processing {len(job_notebooks)} direct job notebooks...")
+    
+    # Resolve dependencies if enabled
+    if include_nested:
+        all_notebooks = collect_job_notebook_dependencies(job_notebooks, verbose)
+        
+        # Separate direct and nested for reporting
+        direct_notebooks = set(job_notebooks)
+        nested_notebooks = all_notebooks - direct_notebooks
+        
+        if verbose:
+            print(f"  Total notebooks to scan: {len(all_notebooks)}")
+            print(f"    - Direct job notebooks: {len(direct_notebooks)}")
+            print(f"    - Nested dependencies:  {len(nested_notebooks)}")
+    else:
+        all_notebooks = set(job_notebooks)
+    
+    if dry_run:
+        print(f"[DRY RUN] Would scan {len(all_notebooks)} job-related notebooks")
+        return []
+    
+    # Get already completed notebooks from checkpoint
+    completed_notebooks = get_completed_items(scan_id, "job_notebook")
+    if completed_notebooks:
+        print(f"  ⏩ Resuming: {len(completed_notebooks)} notebooks already scanned")
+    
+    # Convert to list for indexing
+    notebooks_to_scan = list(all_notebooks - completed_notebooks)
+    total_to_scan = len(notebooks_to_scan)
+    
+    for idx, notebook_path in enumerate(notebooks_to_scan, 1):
+        if verbose:
+            is_nested = notebook_path not in job_notebooks
+            nested_indicator = " (nested)" if is_nested else ""
+            print(f"  [{idx}/{total_to_scan}] Scanning{nested_indicator}: {notebook_path[:60]}...")
+        
+        try:
+            content, file_type = export_notebook(notebook_path)
+            
+            if not content:
+                continue
+            
+            # Determine source type (direct job notebook or nested dependency)
+            is_direct = notebook_path in job_notebooks
+            source_type = "JOB" if is_direct else "JOB_DEPENDENCY"
+            
+            # Scan for patterns
+            findings = scan_content_for_patterns(content, file_type, APPLICABLE_PATTERNS)
+            findings.extend(scan_duplicate_temp_views(content, file_type))
+            
+            if findings:
+                for finding in findings:
+                    results.append({
+                        "scan_timestamp": datetime.now().isoformat(),
+                        "source_type": source_type,
+                        "job_id": None,  # Could be multiple jobs referencing this
+                        "job_name": None,
+                        "job_link": None,
+                        "task_name": None,
+                        "notebook_path": notebook_path,
+                        "notebook_link": get_notebook_link(notebook_path),
+                        **finding
+                    })
+                if verbose:
+                    print(f"    → {len(findings)} findings")
+            elif CONFIG.get("track_clean_notebooks", True):
+                results.append({
+                    "scan_timestamp": datetime.now().isoformat(),
+                    "source_type": source_type,
+                    "job_id": None,
+                    "job_name": None,
+                    "job_link": None,
+                    "task_name": None,
+                    "notebook_path": notebook_path,
+                    "notebook_link": get_notebook_link(notebook_path),
+                    "breaking_change_id": "CLEAN",
+                    "breaking_change_name": "No Issues Found",
+                    "severity": "OK",
+                    "introduced_in": None,
+                    "line_number": None,
+                    "line_content": None,
+                    "description": "No breaking change patterns detected",
+                    "remediation": "Ready for upgrade"
+                })
+                if verbose:
+                    print(f"    → ✅ No issues")
+            
+            # Save checkpoint
+            save_checkpoint(scan_id, "job_notebook", notebook_path, notebook_path, "completed")
+            
+        except Exception as e:
+            print(f"Warning: Could not scan notebook {notebook_path}: {e}")
+            save_checkpoint(scan_id, "job_notebook", notebook_path, notebook_path, "failed", str(e))
     
     return results
 
@@ -986,7 +1732,8 @@ def scan_workspace_path(
     exclude_paths: List[str],
     max_notebooks: int = None,
     dry_run: bool = False,
-    verbose: bool = True
+    verbose: bool = True,
+    filter_to_notebooks: set = None
 ) -> List[Dict]:
     """
     Recursively scan a workspace path for notebooks with breaking changes.
@@ -998,18 +1745,29 @@ def scan_workspace_path(
         max_notebooks: Maximum notebooks to scan (None for all)
         dry_run: If True, just count notebooks without scanning content
         verbose: Print detailed progress
+        filter_to_notebooks: If provided, only scan notebooks in this set (for jobs_only_mode)
     """
     results = []
     notebooks_scanned = [0]  # Use list to allow modification in nested function
     notebooks_found = [0]
+    notebooks_filtered_out = [0]  # Track notebooks skipped due to filter
     
     # Get already completed notebooks from checkpoint
     completed_notebooks = get_completed_items(scan_id, "notebook")
     if completed_notebooks:
         print(f"  ⏩ Resuming: {len(completed_notebooks)} notebooks already scanned")
     
+    if filter_to_notebooks is not None:
+        print(f"  🔍 Filtering: Only scanning {len(filter_to_notebooks)} job-related notebooks")
+    
     def should_exclude(path: str) -> bool:
         return any(path.startswith(excl) for excl in exclude_paths)
+    
+    def should_filter_out(path: str) -> bool:
+        """Check if notebook should be filtered out (not in job-related set)."""
+        if filter_to_notebooks is None:
+            return False
+        return path not in filter_to_notebooks
     
     def scan_directory(path: str):
         # Check if we've hit the limit
@@ -1031,6 +1789,11 @@ def scan_workspace_path(
                     
                 elif obj.object_type == ObjectType.NOTEBOOK:
                     notebooks_found[0] += 1
+                    
+                    # Skip if not in filter set (jobs_only_mode)
+                    if should_filter_out(obj.path):
+                        notebooks_filtered_out[0] += 1
+                        continue
                     
                     # Skip if already scanned (checkpoint)
                     if obj.path in completed_notebooks:
@@ -1109,6 +1872,15 @@ def scan_workspace_path(
     
     if dry_run:
         print(f"[DRY RUN] Found {notebooks_found[0]} notebooks in {root_path}")
+        if filter_to_notebooks is not None:
+            print(f"[DRY RUN] Would filter to {len(filter_to_notebooks)} job-related notebooks")
+    
+    # Print filtering stats if applicable
+    if filter_to_notebooks is not None and notebooks_filtered_out[0] > 0:
+        print(f"  📊 Filtering summary:")
+        print(f"     - Total notebooks found:      {notebooks_found[0]}")
+        print(f"     - Filtered out (standalone):  {notebooks_filtered_out[0]}")
+        print(f"     - Scanned (job-related):      {notebooks_scanned[0]}")
     
     return results
 
@@ -1159,13 +1931,32 @@ print(f"Skipped patterns (already working on {source_version}): {len(BREAKING_PA
 
 # Run the scan
 all_results = []
+job_notebook_paths = []  # Track notebooks from jobs for dependency resolution
 
 print("=" * 60)
 print("DBR MIGRATION - WORKSPACE PROFILER")
 print("=" * 60)
-print(f"Target DBR Version: {CONFIG['target_dbr_version']}")
+print(f"Migration Path: DBR {CONFIG['source_dbr_version']} → {CONFIG['target_dbr_version']}")
 print(f"Scan ID: {SCAN_ID}")
 print(f"Scan started: {datetime.now().isoformat()}")
+
+# Show mode configuration
+print()
+print("📋 SCAN CONFIGURATION:")
+if CONFIG.get("jobs_only_mode"):
+    print("   - Mode: JOBS ONLY (no standalone notebooks)")
+else:
+    print("   - Mode: Full workspace scan")
+
+if CONFIG.get("filter_jobs_by_activity"):
+    print(f"   - Job activity filter: Last {CONFIG.get('job_activity_days', 365)} days")
+else:
+    print("   - Job activity filter: DISABLED (scanning all jobs)")
+
+if CONFIG.get("include_nested_notebooks"):
+    print(f"   - Nested notebooks (%run): ENABLED (max depth: {CONFIG.get('max_nested_depth', 10)})")
+else:
+    print("   - Nested notebooks (%run): DISABLED")
 
 # Show limits if set
 if CONFIG.get("max_jobs") or CONFIG.get("max_notebooks") or CONFIG.get("dry_run"):
@@ -1193,24 +1984,85 @@ if CONFIG.get("enable_checkpointing"):
         print(f"   - Existing progress found: {progress}")
 print()
 
+# Collect job notebooks first if in jobs_only_mode (for filtering workspace scan)
+job_related_notebooks = None
+if CONFIG.get("jobs_only_mode") or CONFIG.get("include_nested_notebooks"):
+    print("COLLECTING JOB NOTEBOOKS...")
+    print("-" * 40)
+    _, job_notebook_paths = scan_all_jobs(
+        scan_id=SCAN_ID,
+        max_jobs=CONFIG.get("max_jobs"),
+        dry_run=False,  # Need to collect notebooks even in dry_run
+        verbose=CONFIG.get("verbose", True),
+        filter_by_activity=CONFIG.get("filter_jobs_by_activity", False),
+        activity_days=CONFIG.get("job_activity_days", 365),
+        collect_notebooks_only=True  # Just collect paths, don't scan yet
+    )
+    
+    # Resolve dependencies if enabled
+    if CONFIG.get("include_nested_notebooks") and job_notebook_paths:
+        print()
+        print("RESOLVING NOTEBOOK DEPENDENCIES...")
+        print("-" * 40)
+        job_related_notebooks = collect_job_notebook_dependencies(
+            job_notebook_paths, 
+            verbose=CONFIG.get("verbose", True)
+        )
+    else:
+        job_related_notebooks = set(job_notebook_paths)
+    print()
+
 # Scan jobs
 if CONFIG["scan_jobs"]:
     print("SCANNING JOBS...")
     print("-" * 40)
-    job_results = scan_all_jobs(
+    job_results, _ = scan_all_jobs(
         scan_id=SCAN_ID,
         max_jobs=CONFIG.get("max_jobs"),
         dry_run=CONFIG.get("dry_run", False),
-        verbose=CONFIG.get("verbose", True)
+        verbose=CONFIG.get("verbose", True),
+        filter_by_activity=CONFIG.get("filter_jobs_by_activity", False),
+        activity_days=CONFIG.get("job_activity_days", 365),
+        collect_notebooks_only=False  # Actually scan this time
     )
     all_results.extend(job_results)
     print(f"Jobs scan complete: {len(job_results)} findings")
     print()
 
+# Scan job-related notebooks with dependencies (if enabled)
+if CONFIG.get("include_nested_notebooks") and job_related_notebooks:
+    print("SCANNING JOB-RELATED NOTEBOOKS (with dependencies)...")
+    print("-" * 40)
+    # Get notebooks that weren't already scanned as direct job tasks
+    # (those are scanned with job context in scan_all_jobs)
+    already_scanned_in_jobs = set(job_notebook_paths)
+    nested_notebooks = job_related_notebooks - already_scanned_in_jobs
+    
+    if nested_notebooks:
+        nested_results = scan_job_notebooks_with_dependencies(
+            scan_id=SCAN_ID,
+            job_notebooks=list(nested_notebooks),
+            include_nested=False,  # Already resolved, no need to recurse
+            dry_run=CONFIG.get("dry_run", False),
+            verbose=CONFIG.get("verbose", True)
+        )
+        all_results.extend(nested_results)
+        print(f"Nested notebooks scan complete: {len(nested_results)} findings")
+    else:
+        print("  No additional nested notebooks to scan")
+    print()
+
 # Scan workspace
 if CONFIG["scan_workspace"]:
-    print("SCANNING WORKSPACE NOTEBOOKS...")
+    # Determine filter based on jobs_only_mode
+    notebook_filter = None
+    if CONFIG.get("jobs_only_mode"):
+        notebook_filter = job_related_notebooks
+        print("SCANNING WORKSPACE NOTEBOOKS (job-related only)...")
+    else:
+        print("SCANNING WORKSPACE NOTEBOOKS...")
     print("-" * 40)
+    
     for path in CONFIG["workspace_paths"]:
         workspace_results = scan_workspace_path(
             scan_id=SCAN_ID,
@@ -1218,10 +2070,13 @@ if CONFIG["scan_workspace"]:
             exclude_paths=CONFIG["exclude_paths"],
             max_notebooks=CONFIG.get("max_notebooks"),
             dry_run=CONFIG.get("dry_run", False),
-            verbose=CONFIG.get("verbose", True)
+            verbose=CONFIG.get("verbose", True),
+            filter_to_notebooks=notebook_filter
         )
         all_results.extend(workspace_results)
-    print(f"Workspace scan complete: {len([r for r in all_results if r['source_type'] == 'WORKSPACE'])} findings")
+    
+    workspace_finding_count = len([r for r in all_results if r.get('source_type') in ('WORKSPACE', 'JOB_DEPENDENCY')])
+    print(f"Workspace scan complete: {workspace_finding_count} findings")
     print()
 
 # Calculate summary stats

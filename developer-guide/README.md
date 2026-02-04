@@ -158,6 +158,21 @@ Run the job on the new DBR version:
 
 3. **Send confirmation email** to BAU team
 
+### Pod Lead Validation
+
+For comprehensive validation before production deployment, Pod Leads should use:
+
+- **[Pod Lead Validation One-Pager](POD-LEAD-VALIDATION-ONE-PAGER.md)** - Quick checklist for tracking validation status
+- **[Pod Lead Validation Checklist](POD-LEAD-VALIDATION-CHECKLIST.md)** - Detailed guide with instructions for each validation step
+
+These documents cover:
+- P1 vs P2 validation requirements
+- Row count and business metrics validation
+- At-scale UAT testing (P1 workloads)
+- Performance regression testing
+- Downstream report validation
+- Final sign-off procedures
+
 ---
 
 ## Common Prompts
