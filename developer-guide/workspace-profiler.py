@@ -1024,31 +1024,68 @@ def get_buffered_items_count() -> int:
 
 # COMMAND ----------
 
+def get_current_workspace_id() -> str:
+    """
+    Get the current workspace ID from Databricks context.
+    
+    Returns:
+        Workspace ID as a string, or None if not available
+    """
+    try:
+        # Method 1: Use dbutils context (most reliable)
+        ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+        workspace_id = ctx.workspaceId().get()
+        return str(workspace_id)
+    except:
+        pass
+    
+    try:
+        # Method 2: Query from system tables directly
+        result = spark.sql("SELECT current_workspace_id()").collect()[0][0]
+        return str(result)
+    except:
+        pass
+    
+    return None
+
 def get_active_job_ids_from_system_tables(days: int = 365) -> set:
     """
     Query system.lakeflow.job_run_timeline to get job IDs that have been executed
-    within the specified number of days.
+    within the specified number of days IN THE CURRENT WORKSPACE.
     
     Args:
         days: Number of days to look back for job activity (default: 365)
     
     Returns:
-        Set of (workspace_id, job_id) tuples for active jobs
+        Set of job_id strings for active jobs in this workspace
     
     Note: Uses system.lakeflow.job_run_timeline which tracks job runs and metadata.
     Reference: https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/jobs
+    
+    IMPORTANT: The system table contains data from ALL workspaces in the account.
+    We filter by workspace_id to only get jobs from the current workspace.
     """
     try:
+        # Get current workspace ID for filtering
+        current_workspace = get_current_workspace_id()
+        
+        workspace_filter = ""
+        if current_workspace:
+            workspace_filter = f"AND workspace_id = '{current_workspace}'"
+            print(f"  Filtering to current workspace: {current_workspace}")
+        else:
+            print("  ⚠️ Could not determine current workspace ID - querying all workspaces")
+        
         # Query job_run_timeline for jobs with recent activity
         # We use period_start_time to filter for jobs that have actually run
         query = f"""
         SELECT DISTINCT
-            workspace_id,
             job_id
         FROM system.lakeflow.job_run_timeline
         WHERE 
             period_start_time >= CURRENT_TIMESTAMP() - INTERVAL {days} DAYS
             AND run_type = 'JOB_RUN'  -- Only standard job executions, not SUBMIT_RUN or WORKFLOW_RUN
+            {workspace_filter}
         """
         
         df = spark.sql(query)
@@ -1078,8 +1115,14 @@ def get_active_jobs_with_metadata(days: int = 365) -> dict:
         - last_run_time: Most recent run timestamp
         - run_count: Number of runs in the period
         - result_states: Set of result states from runs
+    
+    Note: Filters to current workspace only.
     """
     try:
+        # Get current workspace ID for filtering
+        current_workspace = get_current_workspace_id()
+        workspace_filter = f"AND workspace_id = '{current_workspace}'" if current_workspace else ""
+        
         query = f"""
         WITH job_activity AS (
             SELECT
@@ -1091,6 +1134,7 @@ def get_active_jobs_with_metadata(days: int = 365) -> dict:
             WHERE 
                 period_start_time >= CURRENT_TIMESTAMP() - INTERVAL {days} DAYS
                 AND run_type = 'JOB_RUN'
+                {workspace_filter}
             GROUP BY job_id
         )
         SELECT * FROM job_activity
