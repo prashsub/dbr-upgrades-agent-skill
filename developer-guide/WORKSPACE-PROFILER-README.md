@@ -37,7 +37,6 @@ jobs_only_mode = False  (doesn't matter)
 ### Mode 2: Jobs + Dependencies (Recommended)
 ```
 scan_jobs = True
-scan_workspace = True
 jobs_only_mode = True
 include_nested_notebooks = True
 ```
@@ -45,15 +44,18 @@ include_nested_notebooks = True
 **What it does:**
 1. Collects notebook paths from job definitions
 2. Parses `%run` statements to find dependencies
-3. Scans job notebooks and their dependencies
-4. Walks workspace but **only scans notebooks connected to jobs**
+3. Scans job notebooks directly from job tasks
+4. Scans dependency notebooks
+5. **Workspace walk is automatically skipped** (not needed - all job notebooks already scanned)
 
 **What you get:**
 - All notebooks used by jobs (direct + dependencies)
 - Skips standalone notebooks not connected to any job
-- Good balance of coverage vs. noise
+- Fast - no filesystem traversal needed
 
 **Use case:** Focus on production code that actually runs
+
+**Note:** `scan_workspace` is ignored when `jobs_only_mode=True` because the workspace scan would be redundant.
 
 ---
 
@@ -81,15 +83,18 @@ jobs_only_mode = False
 
 ```
                           scan_jobs=True         scan_jobs=True         scan_jobs=True
-                          scan_workspace=False   scan_workspace=True    scan_workspace=True
-                          jobs_only_mode=*       jobs_only_mode=True    jobs_only_mode=False
+                          jobs_only_mode=False   jobs_only_mode=True    scan_workspace=True
+                          scan_workspace=False   (any scan_workspace)   jobs_only_mode=False
                           ─────────────────────  ─────────────────────  ─────────────────────
 Job task notebooks        ✅ Scanned             ✅ Scanned             ✅ Scanned
 %run dependencies         ❌ Missed              ✅ Scanned             ✅ Scanned  
 Standalone notebooks      ❌ Skipped             ❌ Skipped             ✅ Scanned
+Workspace walk            ❌ Skipped             ❌ Auto-skipped        ✅ Runs (slow)
                           ─────────────────────  ─────────────────────  ─────────────────────
-Scope                     Narrowest              Balanced               Widest
+Scope                     Narrowest              Balanced (fast)        Widest (slow)
 ```
+
+**Note:** When `jobs_only_mode=True`, the workspace filesystem walk is automatically skipped because all job-related notebooks are already scanned directly. This makes jobs-only mode much faster.
 
 ---
 

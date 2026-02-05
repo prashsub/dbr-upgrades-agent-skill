@@ -2323,14 +2323,12 @@ if CONFIG.get("include_nested_notebooks") and job_related_notebooks:
     print()
 
 # Scan workspace
-if CONFIG["scan_workspace"]:
-    # Determine filter based on jobs_only_mode
-    notebook_filter = None
-    if CONFIG.get("jobs_only_mode"):
-        notebook_filter = job_related_notebooks
-        print("SCANNING WORKSPACE NOTEBOOKS (job-related only)...")
-    else:
-        print("SCANNING WORKSPACE NOTEBOOKS...")
+# Note: When jobs_only_mode=True, workspace scan is SKIPPED because:
+#   - Phase 3 (scan_all_jobs) already scanned all job task notebooks
+#   - Phase 4 (scan_job_notebooks_with_dependencies) already scanned all %run dependencies
+#   - Walking the filesystem would just re-scan the same notebooks slower
+if CONFIG["scan_workspace"] and not CONFIG.get("jobs_only_mode"):
+    print("SCANNING WORKSPACE NOTEBOOKS...")
     print("-" * 40)
     
     for path in CONFIG["workspace_paths"]:
@@ -2341,14 +2339,18 @@ if CONFIG["scan_workspace"]:
             max_notebooks=CONFIG.get("max_notebooks"),
             dry_run=CONFIG.get("dry_run", False),
             verbose=CONFIG.get("verbose", True),
-            filter_to_notebooks=notebook_filter
+            filter_to_notebooks=None  # Scan all notebooks in workspace
         )
-        # Results are written incrementally, no need to extend all_results
+        # Results are written incrementally
         pass
     
     # Query workspace finding count from the table
     workspace_finding_count = get_results_written_count()
     print(f"Workspace scan complete: {workspace_finding_count} total findings saved")
+    print()
+elif CONFIG.get("jobs_only_mode"):
+    print("WORKSPACE SCAN SKIPPED (jobs_only_mode=True)")
+    print("  → All job-related notebooks already scanned in previous phases")
     print()
 
 # Flush any remaining buffered items
