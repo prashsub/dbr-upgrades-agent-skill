@@ -50,10 +50,10 @@
 # MAGIC |--------|-------------|---------|
 # MAGIC | **Filter Jobs by Activity** | Only scan jobs that have run recently | True |
 # MAGIC | **Job Activity Days** | How many days to look back for job runs | 365 |
-# MAGIC | **Jobs-Only Mode** | Skip standalone notebooks not used by jobs | False |
+# MAGIC | **Jobs-Only Mode** | Skip standalone notebooks not used by jobs | **True** |
 # MAGIC | **Include Nested Notebooks** | Follow `%run` and `dbutils.notebook.run()` calls | True |
 # MAGIC | **Source/Target DBR Version** | Define migration path for pattern filtering | 13.3 → 17.3 |
-# MAGIC | **Max Jobs/Notebooks** | Limit scan for testing (empty = scan all) | empty |
+# MAGIC | **Max Jobs/Notebooks** | Limit scan for testing (empty = scan all) | 2000 / empty |
 # MAGIC | **Dry Run** | Count files without scanning content | False |
 # MAGIC 
 # MAGIC ### Common Configuration Scenarios
@@ -169,14 +169,14 @@ dbutils.widgets.dropdown("filter_jobs_by_activity", "True", ["True", "False"], "
 dbutils.widgets.text("job_activity_days", "365", "15. Job Activity Days")
 
 # --- Jobs-Only Mode ---
-dbutils.widgets.dropdown("jobs_only_mode", "False", ["True", "False"], "16. Jobs-Only Mode")
+dbutils.widgets.dropdown("jobs_only_mode", "True", ["True", "False"], "16. Jobs-Only Mode")
 
 # --- Nested Notebook Resolution ---
 dbutils.widgets.dropdown("include_nested_notebooks", "True", ["True", "False"], "17. Include Nested Notebooks")
 dbutils.widgets.text("max_nested_depth", "10", "18. Max Nested Depth")
 
 # --- Testing/Development Limits ---
-dbutils.widgets.text("max_jobs", "", "19. Max Jobs (empty=all)")
+dbutils.widgets.text("max_jobs", "2000", "19. Max Jobs (empty=all)")
 dbutils.widgets.text("max_notebooks", "", "20. Max Notebooks (empty=all)")
 dbutils.widgets.dropdown("dry_run", "False", ["True", "False"], "21. Dry Run")
 dbutils.widgets.dropdown("verbose", "True", ["True", "False"], "22. Verbose Output")
@@ -184,6 +184,7 @@ dbutils.widgets.dropdown("verbose", "True", ["True", "False"], "22. Verbose Outp
 # --- Checkpointing ---
 dbutils.widgets.dropdown("enable_checkpointing", "True", ["True", "False"], "23. Enable Checkpointing")
 dbutils.widgets.text("checkpoint_table", "scan_checkpoint", "24. Checkpoint Table")
+dbutils.widgets.text("results_batch_size", "50", "25. Checkpoint Batch Size (items per batch)")
 
 # COMMAND ----------
 
@@ -237,10 +238,12 @@ CONFIG = {
     "dry_run": _parse_bool(dbutils.widgets.get("dry_run")),
     "verbose": _parse_bool(dbutils.widgets.get("verbose")),
     
-    # Checkpointing
+    # Checkpointing and batched writes
+    # checkpoint_batch_size controls how many items are scanned before writing to Delta.
+    # Both results AND checkpoints are written together in each batch for atomicity.
     "enable_checkpointing": _parse_bool(dbutils.widgets.get("enable_checkpointing")),
     "checkpoint_table": dbutils.widgets.get("checkpoint_table"),
-    "checkpoint_batch_size": 10,  # Not configurable via widget (internal setting)
+    "checkpoint_batch_size": int(dbutils.widgets.get("results_batch_size") or "50"),
 }
 
 # Display current configuration
@@ -745,46 +748,6 @@ def get_completed_items(scan_id: str, item_type: str) -> set:
     except:
         return set()
 
-def save_checkpoint(scan_id: str, item_type: str, item_id: str, item_path: str, status: str = "completed", error: str = None):
-    """Save a checkpoint for a scanned item."""
-    if not CONFIG.get("enable_checkpointing", False):
-        return
-    
-    checkpoint_table = get_checkpoint_table_name()
-    
-    # Use SQL INSERT for simplicity
-    error_escaped = error.replace("'", "''") if error else ""
-    path_escaped = item_path.replace("'", "''") if item_path else ""
-    
-    spark.sql(f"""
-        INSERT INTO {checkpoint_table}
-        VALUES (
-            '{scan_id}',
-            '{item_type}',
-            '{item_id}',
-            '{path_escaped}',
-            '{status}',
-            current_timestamp(),
-            '{error_escaped}'
-        )
-    """)
-
-def save_checkpoints_batch(scan_id: str, items: list):
-    """Save multiple checkpoints at once (more efficient)."""
-    if not CONFIG.get("enable_checkpointing", False) or not items:
-        return
-    
-    checkpoint_table = get_checkpoint_table_name()
-    
-    # Create DataFrame from items
-    from pyspark.sql.functions import current_timestamp, lit
-    
-    df = spark.createDataFrame(items)
-    df = df.withColumn("scan_id", lit(scan_id)) \
-           .withColumn("scanned_at", current_timestamp())
-    
-    df.write.format("delta").mode("append").saveAsTable(checkpoint_table)
-
 def get_scan_progress(scan_id: str) -> dict:
     """Get progress summary for a scan."""
     if not CONFIG.get("enable_checkpointing", False):
@@ -819,6 +782,237 @@ def clear_checkpoint(scan_id: str = None):
     else:
         spark.sql(f"DELETE FROM {checkpoint_table}")
         print(f"🗑️ Cleared all checkpoints")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Batched Checkpoint System
+# MAGIC 
+# MAGIC Results and checkpoints are written together in batches during scanning.
+# MAGIC When `checkpoint_batch_size` items have been scanned:
+# MAGIC 1. Results are written to the Delta results table
+# MAGIC 2. Checkpoints are written to the Delta checkpoint table
+# MAGIC 3. Buffers are cleared
+# MAGIC 
+# MAGIC This ensures atomicity - checkpoints are only saved AFTER results are persisted.
+
+# COMMAND ----------
+
+# Global state for batched checkpoint system
+_RESULTS_BUFFER = []           # Buffered scan results (findings)
+_CHECKPOINT_BUFFER = []        # Buffered checkpoint records (items scanned)
+_ITEMS_SCANNED_COUNT = 0       # Count of items in current batch
+_RESULTS_WRITTEN_COUNT = 0     # Total results written to Delta
+_ITEMS_CHECKPOINTED_COUNT = 0  # Total items checkpointed
+_BATCH_INITIALIZED = False
+
+def get_results_table_name() -> str:
+    """Get the full results table name."""
+    return f"{CONFIG['output_catalog']}.{CONFIG['output_schema']}.{CONFIG['output_table']}"
+
+def initialize_batch_system(scan_id: str, is_resume: bool = False):
+    """
+    Initialize the batched checkpoint system for a scan.
+    
+    If this is a fresh scan and truncate_on_scan is True, truncate the results table.
+    If this is a resume, do NOT truncate (preserve existing results).
+    """
+    global _RESULTS_BUFFER, _CHECKPOINT_BUFFER, _ITEMS_SCANNED_COUNT
+    global _RESULTS_WRITTEN_COUNT, _ITEMS_CHECKPOINTED_COUNT, _BATCH_INITIALIZED
+    
+    _RESULTS_BUFFER = []
+    _CHECKPOINT_BUFFER = []
+    _ITEMS_SCANNED_COUNT = 0
+    _RESULTS_WRITTEN_COUNT = 0
+    _ITEMS_CHECKPOINTED_COUNT = 0
+    
+    results_table = get_results_table_name()
+    
+    # Create schema if not exists
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CONFIG['output_catalog']}.{CONFIG['output_schema']}")
+    
+    # Only truncate on fresh scan (not resume) if configured
+    if CONFIG.get("truncate_on_scan", False) and not is_resume:
+        try:
+            spark.sql(f"TRUNCATE TABLE {results_table}")
+            print(f"🗑️ Truncated results table: {results_table}")
+        except Exception as e:
+            # Table might not exist yet, that's OK
+            print(f"ℹ️ Results table will be created on first write")
+    elif is_resume:
+        # Count existing results for this scan
+        try:
+            existing_count = spark.sql(f"""
+                SELECT COUNT(*) as cnt FROM {results_table} WHERE scan_id = '{scan_id}'
+            """).collect()[0].cnt
+            if existing_count > 0:
+                print(f"📊 Resuming scan - found {existing_count} existing results for scan_id: {scan_id}")
+                _RESULTS_WRITTEN_COUNT = existing_count
+        except:
+            pass
+        
+        # Count existing checkpoints for this scan
+        if CONFIG.get("enable_checkpointing"):
+            try:
+                checkpoint_count = spark.sql(f"""
+                    SELECT COUNT(*) as cnt FROM {get_checkpoint_table_name()} 
+                    WHERE scan_id = '{scan_id}' AND status = 'completed'
+                """).collect()[0].cnt
+                if checkpoint_count > 0:
+                    print(f"📊 Found {checkpoint_count} existing checkpoints for scan_id: {scan_id}")
+                    _ITEMS_CHECKPOINTED_COUNT = checkpoint_count
+            except:
+                pass
+    
+    _BATCH_INITIALIZED = True
+    print(f"✅ Results table ready: {results_table}")
+
+def record_item_scanned(scan_id: str, item_type: str, item_id: str, item_path: str, 
+                        results: List[Dict], status: str = "completed", error: str = None):
+    """
+    Record that an item has been scanned, buffering results and checkpoint info.
+    
+    When the buffer reaches checkpoint_batch_size, both results and checkpoints
+    are flushed to Delta together (results first, then checkpoints).
+    
+    Args:
+        scan_id: Unique scan identifier
+        item_type: Type of item (job, notebook, job_notebook)
+        item_id: Unique ID of the item
+        item_path: Path or name of the item
+        results: List of result dictionaries from scanning this item
+        status: Scan status (completed, failed)
+        error: Error message if status is failed
+    
+    Returns:
+        Number of items flushed (0 if batch not yet full)
+    """
+    global _RESULTS_BUFFER, _CHECKPOINT_BUFFER, _ITEMS_SCANNED_COUNT
+    
+    # Add results to buffer
+    _RESULTS_BUFFER.extend(results)
+    
+    # Add checkpoint record to buffer
+    _CHECKPOINT_BUFFER.append({
+        "scan_id": scan_id,
+        "item_type": item_type,
+        "item_id": item_id,
+        "item_path": item_path,
+        "status": status,
+        "error": error or ""
+    })
+    
+    _ITEMS_SCANNED_COUNT += 1
+    
+    # Check if we should flush
+    batch_size = CONFIG.get("checkpoint_batch_size", 50)
+    if _ITEMS_SCANNED_COUNT >= batch_size:
+        return flush_batch(scan_id)
+    
+    return 0
+
+def flush_batch(scan_id: str) -> int:
+    """
+    Flush buffered results and checkpoints to Delta.
+    
+    Order of operations (for atomicity):
+    1. Write results to Delta results table
+    2. Write checkpoints to Delta checkpoint table (if enabled)
+    3. Clear buffers
+    
+    Args:
+        scan_id: Unique scan identifier
+    
+    Returns:
+        Number of items flushed
+    """
+    global _RESULTS_BUFFER, _CHECKPOINT_BUFFER, _ITEMS_SCANNED_COUNT
+    global _RESULTS_WRITTEN_COUNT, _ITEMS_CHECKPOINTED_COUNT
+    
+    # Nothing to flush
+    if _ITEMS_SCANNED_COUNT == 0 and not _RESULTS_BUFFER and not _CHECKPOINT_BUFFER:
+        return 0
+    
+    items_to_flush = _ITEMS_SCANNED_COUNT
+    results_to_flush = len(_RESULTS_BUFFER)
+    checkpoints_to_flush = len(_CHECKPOINT_BUFFER)
+    
+    # Step 1: Write results to Delta (if any)
+    if _RESULTS_BUFFER:
+        results_table = get_results_table_name()
+        
+        try:
+            from pyspark.sql.functions import lit
+            
+            results_df = spark.createDataFrame(_RESULTS_BUFFER, schema=RESULT_SCHEMA)
+            results_df = results_df \
+                .withColumn("scan_id", lit(scan_id)) \
+                .withColumn("target_dbr_version", lit(CONFIG["target_dbr_version"]))
+            
+            results_df.write \
+                .format("delta") \
+                .mode("append") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(results_table)
+            
+            _RESULTS_WRITTEN_COUNT += results_to_flush
+            
+        except Exception as e:
+            print(f"⚠️ Error writing results batch: {e}")
+            # Don't clear buffers on error - allow retry
+            return 0
+    
+    # Step 2: Write checkpoints to Delta (if enabled)
+    if _CHECKPOINT_BUFFER and CONFIG.get("enable_checkpointing", False):
+        checkpoint_table = get_checkpoint_table_name()
+        
+        try:
+            from pyspark.sql.functions import current_timestamp
+            
+            checkpoint_df = spark.createDataFrame(_CHECKPOINT_BUFFER)
+            checkpoint_df = checkpoint_df.withColumn("scanned_at", current_timestamp())
+            
+            checkpoint_df.write \
+                .format("delta") \
+                .mode("append") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(checkpoint_table)
+            
+            _ITEMS_CHECKPOINTED_COUNT += checkpoints_to_flush
+            
+        except Exception as e:
+            print(f"⚠️ Error writing checkpoint batch: {e}")
+            # Results were written but checkpoints failed
+            # Clear results buffer but keep checkpoint buffer for retry
+            _RESULTS_BUFFER = []
+            return 0
+    
+    # Step 3: Clear buffers
+    _RESULTS_BUFFER = []
+    _CHECKPOINT_BUFFER = []
+    _ITEMS_SCANNED_COUNT = 0
+    
+    if CONFIG.get("verbose", True):
+        checkpoint_msg = f", {_ITEMS_CHECKPOINTED_COUNT} checkpoints" if CONFIG.get("enable_checkpointing") else ""
+        print(f"  💾 Batch saved: {items_to_flush} items, {results_to_flush} results (total: {_RESULTS_WRITTEN_COUNT} results{checkpoint_msg})")
+    
+    return items_to_flush
+
+def get_results_written_count() -> int:
+    """Get the total number of results written so far."""
+    return _RESULTS_WRITTEN_COUNT
+
+def get_items_checkpointed_count() -> int:
+    """Get the total number of items checkpointed so far."""
+    return _ITEMS_CHECKPOINTED_COUNT
+
+def get_buffered_results_count() -> int:
+    """Get the number of results currently in the buffer."""
+    return len(_RESULTS_BUFFER)
+
+def get_buffered_items_count() -> int:
+    """Get the number of items currently in the buffer (not yet checkpointed)."""
+    return _ITEMS_SCANNED_COUNT
 
 # COMMAND ----------
 
@@ -1572,15 +1766,20 @@ def scan_all_jobs(
                             if verbose:
                                 print(f"    → Task '{task.task_key}': ✅ No issues")
             
-            # Save checkpoint for this job (skip if only collecting notebooks)
+            # Record this job as scanned (buffers results + checkpoint, flushes when batch is full)
             if not collect_notebooks_only:
-                save_checkpoint(scan_id, "job", job_id_str, job_name, "completed")
+                record_item_scanned(scan_id, "job", job_id_str, job_name, results, "completed")
+                results = []  # Clear local buffer after recording
             
         except Exception as e:
             print(f"Warning: Could not scan job {job.job_id}: {e}")
-            # Save failed checkpoint (skip if only collecting notebooks)
+            # Record failed job
             if not collect_notebooks_only:
-                save_checkpoint(scan_id, "job", job_id_str, str(job.job_id), "failed", str(e))
+                record_item_scanned(scan_id, "job", job_id_str, str(job.job_id), [], "failed", str(e))
+    
+    # Flush any remaining buffered items
+    if not collect_notebooks_only:
+        flush_batch(scan_id)
     
     if verbose and collect_notebooks_only:
         print(f"  Found {len(job_notebook_paths)} unique notebooks from job tasks")
@@ -1710,14 +1909,18 @@ def scan_job_notebooks_with_dependencies(
                 if verbose:
                     print(f"    → ✅ No issues")
             
-            # Save checkpoint
-            save_checkpoint(scan_id, "job_notebook", notebook_path, notebook_path, "completed")
+            # Record this notebook as scanned (buffers results + checkpoint, flushes when batch is full)
+            record_item_scanned(scan_id, "job_notebook", notebook_path, notebook_path, results, "completed")
+            results = []  # Clear local buffer after recording
             
         except Exception as e:
             print(f"Warning: Could not scan notebook {notebook_path}: {e}")
-            save_checkpoint(scan_id, "job_notebook", notebook_path, notebook_path, "failed", str(e))
+            record_item_scanned(scan_id, "job_notebook", notebook_path, notebook_path, [], "failed", str(e))
     
-    return results
+    # Flush any remaining buffered items
+    flush_batch(scan_id)
+    
+    return []
 
 # COMMAND ----------
 
@@ -1854,12 +2057,13 @@ def scan_workspace_path(
                                 if verbose:
                                     print(f"    → ✅ No issues")
                         
-                        # Save checkpoint for this notebook
-                        save_checkpoint(scan_id, "notebook", obj.path, obj.path, "completed")
+                        # Record this notebook as scanned (buffers results + checkpoint, flushes when batch is full)
+                        record_item_scanned(scan_id, "notebook", obj.path, obj.path, results, "completed")
+                        results.clear()  # Clear the list in place
                         
                     except Exception as nb_error:
                         print(f"Warning: Could not scan notebook {obj.path}: {nb_error}")
-                        save_checkpoint(scan_id, "notebook", obj.path, obj.path, "failed", str(nb_error))
+                        record_item_scanned(scan_id, "notebook", obj.path, obj.path, [], "failed", str(nb_error))
                             
         except Exception as e:
             print(f"Warning: Could not scan {path}: {e}")
@@ -1882,7 +2086,10 @@ def scan_workspace_path(
         print(f"     - Filtered out (standalone):  {notebooks_filtered_out[0]}")
         print(f"     - Scanned (job-related):      {notebooks_scanned[0]}")
     
-    return results
+    # Flush any remaining buffered items
+    flush_batch(scan_id)
+    
+    return []
 
 # COMMAND ----------
 
@@ -1930,7 +2137,7 @@ print(f"Patterns applicable: {len(APPLICABLE_PATTERNS)} of {len(BREAKING_PATTERN
 print(f"Skipped patterns (already working on {source_version}): {len(BREAKING_PATTERNS) - len(APPLICABLE_PATTERNS)}")
 
 # Run the scan
-all_results = []
+# Note: Results are written incrementally to the Delta table, not accumulated in memory
 job_notebook_paths = []  # Track notebooks from jobs for dependency resolution
 
 print("=" * 60)
@@ -1970,6 +2177,7 @@ if CONFIG.get("max_jobs") or CONFIG.get("max_notebooks") or CONFIG.get("dry_run"
         print(f"   - Max notebooks per path: {CONFIG['max_notebooks']}")
 
 # Initialize checkpointing
+is_resume_scan = False
 if CONFIG.get("enable_checkpointing"):
     print()
     print("📍 CHECKPOINTING ENABLED:")
@@ -1982,6 +2190,19 @@ if CONFIG.get("enable_checkpointing"):
     progress = get_scan_progress(SCAN_ID)
     if progress:
         print(f"   - Existing progress found: {progress}")
+        is_resume_scan = True
+
+# Initialize batched checkpoint system
+print()
+print("💾 BATCHED CHECKPOINT SYSTEM:")
+print(f"   - Results table: {get_results_table_name()}")
+print(f"   - Batch size: {CONFIG.get('checkpoint_batch_size', 50)} items")
+print("   - When batch size is reached:")
+print("     1. Results are written to Delta")
+if CONFIG.get("enable_checkpointing"):
+    print("     2. Checkpoints are written to Delta")
+print("     3. Buffers are cleared, scan continues")
+initialize_batch_system(SCAN_ID, is_resume=is_resume_scan)
 print()
 
 # Collect job notebooks first if in jobs_only_mode (for filtering workspace scan)
@@ -2025,7 +2246,7 @@ if CONFIG["scan_jobs"]:
         activity_days=CONFIG.get("job_activity_days", 365),
         collect_notebooks_only=False  # Actually scan this time
     )
-    all_results.extend(job_results)
+    # Results are written incrementally, no need to extend all_results
     print(f"Jobs scan complete: {len(job_results)} findings")
     print()
 
@@ -2046,7 +2267,7 @@ if CONFIG.get("include_nested_notebooks") and job_related_notebooks:
             dry_run=CONFIG.get("dry_run", False),
             verbose=CONFIG.get("verbose", True)
         )
-        all_results.extend(nested_results)
+        # Results are written incrementally, no need to extend all_results
         print(f"Nested notebooks scan complete: {len(nested_results)} findings")
     else:
         print("  No additional nested notebooks to scan")
@@ -2073,45 +2294,81 @@ if CONFIG["scan_workspace"]:
             verbose=CONFIG.get("verbose", True),
             filter_to_notebooks=notebook_filter
         )
-        all_results.extend(workspace_results)
+        # Results are written incrementally, no need to extend all_results
+        pass
     
-    workspace_finding_count = len([r for r in all_results if r.get('source_type') in ('WORKSPACE', 'JOB_DEPENDENCY')])
-    print(f"Workspace scan complete: {workspace_finding_count} findings")
+    # Query workspace finding count from the table
+    workspace_finding_count = get_results_written_count()
+    print(f"Workspace scan complete: {workspace_finding_count} total findings saved")
     print()
 
-# Calculate summary stats
-clean_count = len([r for r in all_results if r.get("severity") == "OK"])
-issue_count = len([r for r in all_results if r.get("severity") != "OK"])
-total_notebooks = len(set(r["notebook_path"] for r in all_results))
-clean_notebooks = len(set(r["notebook_path"] for r in all_results if r.get("severity") == "OK"))
-notebooks_with_issues = total_notebooks - clean_notebooks
+# Flush any remaining buffered items
+remaining_items = get_buffered_items_count()
+if remaining_items > 0:
+    print(f"Flushing {remaining_items} remaining buffered items...")
+    flush_batch(SCAN_ID)
+
+# Calculate summary stats from the results table (results were written incrementally)
+output_table = get_results_table_name()
+total_written = get_results_written_count()
 
 print("=" * 60)
 print("SCAN SUMMARY")
 print("=" * 60)
-print(f"Total notebooks scanned: {total_notebooks}")
-print(f"  ✅ Clean (no issues):  {clean_notebooks}")
-print(f"  ⚠️  With issues:        {notebooks_with_issues}")
-print()
-print(f"Total records: {len(all_results)}")
-print(f"  - Issue findings: {issue_count}")
-print(f"  - Clean records:  {clean_count}")
+print(f"Results saved incrementally to: {output_table}")
+print(f"Scan ID: {SCAN_ID}")
+print(f"Total results written: {total_written}")
+
+# Query actual stats from the table for this scan
+try:
+    stats_df = spark.sql(f"""
+        SELECT 
+            COUNT(*) as total_records,
+            COUNT(DISTINCT notebook_path) as total_notebooks,
+            SUM(CASE WHEN severity = 'OK' THEN 1 ELSE 0 END) as clean_records,
+            SUM(CASE WHEN severity != 'OK' THEN 1 ELSE 0 END) as issue_records,
+            COUNT(DISTINCT CASE WHEN severity = 'OK' THEN notebook_path END) as clean_notebooks,
+            COUNT(DISTINCT CASE WHEN severity != 'OK' THEN notebook_path END) as notebooks_with_issues
+        FROM {output_table}
+        WHERE scan_id = '{SCAN_ID}'
+    """)
+    stats = stats_df.collect()[0]
+    
+    print(f"Total notebooks scanned: {stats.total_notebooks}")
+    print(f"  ✅ Clean (no issues):  {stats.clean_notebooks}")
+    print(f"  ⚠️  With issues:        {stats.notebooks_with_issues}")
+    print()
+    print(f"Total records: {stats.total_records}")
+    print(f"  - Issue findings: {stats.issue_records}")
+    print(f"  - Clean records:  {stats.clean_records}")
+except Exception as e:
+    print(f"  (Could not query stats from table: {e})")
 print("=" * 60)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Save Results
+# MAGIC ## Review Results
+# MAGIC
+# MAGIC Results were saved incrementally during scanning to: `{catalog}.{schema}.{table}`
+# MAGIC 
+# MAGIC The following cells query the saved results for analysis.
 
 # COMMAND ----------
 
-# Convert to DataFrame
-if all_results:
-    results_df = spark.createDataFrame(all_results, schema=RESULT_SCHEMA)
-else:
-    results_df = spark.createDataFrame([], schema=RESULT_SCHEMA)
+# Load results from table for this scan
+output_table = get_results_table_name()
+
+results_df = spark.sql(f"""
+    SELECT * FROM {output_table}
+    WHERE scan_id = '{SCAN_ID}'
+""")
 
 # Show summary
+print(f"SCAN ID: {SCAN_ID}")
+print(f"TABLE: {output_table}")
+print()
+
 print("FINDINGS BY SEVERITY:")
 results_df.groupBy("severity").count().orderBy("severity").show()
 
@@ -2120,41 +2377,6 @@ results_df.groupBy("breaking_change_id", "breaking_change_name").count().orderBy
 
 print("TOP NOTEBOOKS BY FINDINGS:")
 results_df.groupBy("notebook_path").count().orderBy("count", ascending=False).show(20, truncate=False)
-
-# COMMAND ----------
-
-# Create schema if not exists
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CONFIG['output_catalog']}.{CONFIG['output_schema']}")
-
-# Save to Delta table
-output_table = f"{CONFIG['output_catalog']}.{CONFIG['output_schema']}.{CONFIG['output_table']}"
-print(f"Saving results to: {output_table}")
-
-# Add scan metadata
-from pyspark.sql.functions import lit, current_timestamp
-
-results_with_metadata = results_df \
-    .withColumn("scan_id", lit(datetime.now().strftime("%Y%m%d_%H%M%S"))) \
-    .withColumn("target_dbr_version", lit(CONFIG["target_dbr_version"]))
-
-# Truncate table before writing if configured (avoids duplicates on re-runs)
-if CONFIG.get("truncate_on_scan", False):
-    try:
-        spark.sql(f"TRUNCATE TABLE {output_table}")
-        print(f"🗑️ Truncated existing table: {output_table}")
-    except Exception as e:
-        # Table might not exist yet, that's OK
-        print(f"ℹ️ Table {output_table} will be created (truncate skipped: {e})")
-
-# Write to Delta
-write_mode = "overwrite" if CONFIG.get("truncate_on_scan", False) else "append"
-results_with_metadata.write \
-    .format("delta") \
-    .mode(write_mode) \
-    .option("mergeSchema", "true") \
-    .saveAsTable(output_table)
-
-print(f"✅ Saved {results_df.count()} findings to {output_table}")
 
 # COMMAND ----------
 
@@ -2392,7 +2614,7 @@ def generate_html_report(df) -> str:
     return html
 
 # Generate and save HTML report
-if all_results:
+if results_df.count() > 0:
     html_report = generate_html_report(results_df)
     
     # Use CONFIG csv_path to derive HTML path
