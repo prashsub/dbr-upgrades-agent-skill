@@ -1162,17 +1162,33 @@ def get_active_jobs_with_metadata(days: int = 365) -> dict:
         return {}
 
 
-def print_job_activity_summary(active_jobs: set, total_jobs: int, days: int):
+def print_job_activity_summary(active_jobs: set, total_jobs: int, days: int, existing_job_ids: set = None):
     """Print a summary of job activity filtering."""
     if active_jobs is None:
         print(f"  ℹ️ System tables not available - scanning all {total_jobs} jobs")
     else:
-        filtered_count = len(active_jobs)
-        skipped_count = total_jobs - filtered_count
-        print(f"  📊 Job Activity Filter (last {days} days):")
-        print(f"     - Total jobs in workspace: {total_jobs}")
-        print(f"     - Jobs with recent runs:   {filtered_count}")
-        print(f"     - Jobs skipped (inactive): {skipped_count}")
+        # active_jobs from system table may include deleted jobs
+        # We need to show how many EXISTING jobs have recent activity
+        if existing_job_ids:
+            # Intersection: jobs that exist AND have recent activity
+            active_existing = active_jobs.intersection(existing_job_ids)
+            active_count = len(active_existing)
+            inactive_count = total_jobs - active_count
+            deleted_with_history = len(active_jobs) - active_count
+            
+            print(f"  📊 Job Activity Filter (last {days} days):")
+            print(f"     - Total jobs in workspace: {total_jobs}")
+            print(f"     - Jobs with recent runs:   {active_count}")
+            print(f"     - Jobs skipped (inactive): {inactive_count}")
+            if deleted_with_history > 0:
+                print(f"     - (Deleted jobs with history: {deleted_with_history} - ignored)")
+        else:
+            # Fallback if we don't have existing_job_ids
+            filtered_count = len(active_jobs)
+            print(f"  📊 Job Activity Filter (last {days} days):")
+            print(f"     - Total jobs in workspace: {total_jobs}")
+            print(f"     - Jobs with runs in system table: {filtered_count}")
+            print(f"     - Note: May include deleted jobs")
 
 # COMMAND ----------
 
@@ -1698,12 +1714,15 @@ def scan_all_jobs(
     jobs = list(w.jobs.list())
     total_jobs = len(jobs)
     
+    # Build set of existing job IDs for accurate stats
+    existing_job_ids = set(str(j.job_id) for j in jobs)
+    
     # Filter jobs by activity using system tables
     active_job_ids = None
     if filter_by_activity:
         print(f"  Querying system.lakeflow.job_run_timeline for jobs active in last {activity_days} days...")
         active_job_ids = get_active_job_ids_from_system_tables(activity_days)
-        print_job_activity_summary(active_job_ids, total_jobs, activity_days)
+        print_job_activity_summary(active_job_ids, total_jobs, activity_days, existing_job_ids)
         
         if active_job_ids is not None:
             # Filter jobs list to only include active jobs
