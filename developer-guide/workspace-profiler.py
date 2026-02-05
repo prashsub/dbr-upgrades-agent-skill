@@ -1071,7 +1071,8 @@ def get_active_job_ids_from_system_tables(days: int = 365) -> set:
         
         workspace_filter = ""
         if current_workspace:
-            workspace_filter = f"AND workspace_id = '{current_workspace}'"
+            # workspace_id is BIGINT in system tables - don't quote the value
+            workspace_filter = f"AND workspace_id = {current_workspace}"
             print(f"  Filtering to current workspace: {current_workspace}")
         else:
             print("  ⚠️ Could not determine current workspace ID - querying all workspaces")
@@ -1120,8 +1121,9 @@ def get_active_jobs_with_metadata(days: int = 365) -> dict:
     """
     try:
         # Get current workspace ID for filtering
+        # workspace_id is BIGINT in system tables - don't quote the value
         current_workspace = get_current_workspace_id()
-        workspace_filter = f"AND workspace_id = '{current_workspace}'" if current_workspace else ""
+        workspace_filter = f"AND workspace_id = {current_workspace}" if current_workspace else ""
         
         query = f"""
         WITH job_activity AS (
