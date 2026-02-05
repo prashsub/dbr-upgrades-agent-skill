@@ -247,6 +247,7 @@ The fix on line X caused a syntax error, please review and correct
 
 ## References
 
+- **[WORKSPACE-PROFILER-README.md](WORKSPACE-PROFILER-README.md)** - Detailed profiler configuration and usage guide
 - **[BREAKING-CHANGES-EXPLAINED.md](BREAKING-CHANGES-EXPLAINED.md)** - Technical details on each breaking change
 - **[SKILL.md](../databricks-dbr-migration/SKILL.md)** - Agent skill definition
 - **[workspace-profiler.py](workspace-profiler.py)** - Profiler script

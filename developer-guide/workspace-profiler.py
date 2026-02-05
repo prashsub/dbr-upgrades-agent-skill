@@ -1085,9 +1085,12 @@ def get_active_job_ids_from_system_tables(days: int = 365) -> set:
         FROM system.lakeflow.job_run_timeline
         WHERE 
             period_start_time >= CURRENT_TIMESTAMP() - INTERVAL {days} DAYS
-            AND run_type = 'JOB_RUN'  -- Only standard job executions, not SUBMIT_RUN or WORKFLOW_RUN
+            AND run_type = 'JOB_RUN'
             {workspace_filter}
         """
+        
+        # Debug: print the actual query
+        print(f"  DEBUG - Query: {query.strip()}")
         
         df = spark.sql(query)
         active_jobs = set()
