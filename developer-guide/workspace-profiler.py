@@ -1702,12 +1702,14 @@ def scan_all_jobs(
         collect_notebooks_only: If True, only collect notebook paths without scanning
     
     Returns:
-        Tuple of (scan_results, job_notebook_paths)
+        Tuple of (scan_results, job_notebook_paths, notebook_to_jobs)
         - scan_results: List of finding dictionaries
         - job_notebook_paths: List of notebook paths from job tasks (for dependency resolution)
+        - notebook_to_jobs: Dict mapping notebook_path → [(job_id, job_name)] for tracing
     """
     results = []
     job_notebook_paths = []  # Track all notebooks referenced by jobs
+    notebook_to_jobs = {}  # Reverse mapping: notebook_path → [(job_id, job_name)]
     checkpoint_batch = []
     
     print("Fetching jobs...")
@@ -1737,7 +1739,7 @@ def scan_all_jobs(
     
     if dry_run:
         print(f"[DRY RUN] Would scan {len(jobs)} jobs")
-        return [], []
+        return [], [], notebook_to_jobs
     
     # Get already completed jobs from checkpoint
     completed_jobs = get_completed_items(scan_id, "job")
@@ -1784,6 +1786,13 @@ def scan_all_jobs(
                     if notebook_path not in job_notebook_paths:
                         job_notebook_paths.append(notebook_path)
                     
+                    # Build reverse mapping: notebook_path → [(job_id, job_name)]
+                    if notebook_path not in notebook_to_jobs:
+                        notebook_to_jobs[notebook_path] = []
+                    job_entry = (job.job_id, job_name)
+                    if job_entry not in notebook_to_jobs[notebook_path]:
+                        notebook_to_jobs[notebook_path].append(job_entry)
+                    
                     # Skip actual scanning if we're only collecting notebook paths
                     if collect_notebooks_only:
                         continue
@@ -1796,6 +1805,10 @@ def scan_all_jobs(
                         # Scan for duplicate temp views
                         findings.extend(scan_duplicate_temp_views(content, file_type))
                         
+                        # Build referenced_by_jobs for this notebook
+                        nb_jobs = notebook_to_jobs.get(notebook_path, [])
+                        ref_by = ", ".join(f"{n} (id: {j})" for j, n in nb_jobs) if nb_jobs else f"{job_name} (id: {job.job_id})"
+                        
                         if findings:
                             for finding in findings:
                                 results.append({
@@ -1807,6 +1820,7 @@ def scan_all_jobs(
                                     "task_name": task.task_key,
                                     "notebook_path": notebook_path,
                                     "notebook_link": get_notebook_link(notebook_path),
+                                    "referenced_by_jobs": ref_by,
                                     **finding
                                 })
                             if verbose:
@@ -1822,6 +1836,7 @@ def scan_all_jobs(
                                 "task_name": task.task_key,
                                 "notebook_path": notebook_path,
                                 "notebook_link": get_notebook_link(notebook_path),
+                                "referenced_by_jobs": ref_by,
                                 "breaking_change_id": "CLEAN",
                                 "breaking_change_name": "No Issues Found",
                                 "severity": "OK",
@@ -1852,7 +1867,7 @@ def scan_all_jobs(
     if verbose and collect_notebooks_only:
         print(f"  Found {len(job_notebook_paths)} unique notebooks from job tasks")
     
-    return results, job_notebook_paths
+    return results, job_notebook_paths, notebook_to_jobs
 
 # COMMAND ----------
 
@@ -1867,23 +1882,25 @@ def scan_job_notebooks_with_dependencies(
     include_nested: bool = True,
     max_nested_depth: int = 10,
     dry_run: bool = False,
-    verbose: bool = True
+    verbose: bool = True,
+    notebook_to_jobs: Dict = None
 ) -> List[Dict]:
     """
-    Scan notebooks that are part of jobs, including nested dependencies via %run.
+    Scan dependency notebooks that are referenced by job tasks via %run.
     
     This function:
-    1. Takes the list of notebook paths from job tasks
-    2. Resolves all %run and dbutils.notebook.run dependencies
-    3. Scans all notebooks (direct and nested) for breaking changes
+    1. Takes the list of dependency notebook paths
+    2. Scans each for breaking changes
+    3. Labels results as JOB_DEPENDENCY with referenced_by_jobs info
     
     Args:
         scan_id: Unique identifier for this scan (for checkpointing)
-        job_notebooks: List of notebook paths from job tasks
+        job_notebooks: List of dependency notebook paths to scan
         include_nested: If True, include notebooks referenced via %run
         max_nested_depth: Maximum depth for dependency resolution
         dry_run: If True, just count notebooks without scanning
         verbose: Print detailed progress
+        notebook_to_jobs: Mapping of notebook_path → [(job_id, job_name)] for tracing dependencies back to jobs
     
     Returns:
         List of finding dictionaries
@@ -1920,11 +1937,22 @@ def scan_job_notebooks_with_dependencies(
     notebooks_to_scan = list(all_notebooks - completed_notebooks)
     total_to_scan = len(notebooks_to_scan)
     
+    # Build referenced_by_jobs lookup for dependency notebooks
+    # This traces each dependency back to the jobs that use it (directly or indirectly)
+    if notebook_to_jobs is None:
+        notebook_to_jobs = {}
+    
+    def _get_referenced_by_jobs(nb_path: str) -> str:
+        """Get a human-readable string of jobs that reference this notebook."""
+        job_refs = notebook_to_jobs.get(nb_path, [])
+        if not job_refs:
+            return None
+        # Format: "job_name (id: 123), job_name2 (id: 456)"
+        return ", ".join(f"{name} (id: {jid})" for jid, name in job_refs)
+    
     for idx, notebook_path in enumerate(notebooks_to_scan, 1):
         if verbose:
-            is_nested = notebook_path not in job_notebooks
-            nested_indicator = " (nested)" if is_nested else ""
-            print(f"  [{idx}/{total_to_scan}] Scanning{nested_indicator}: {notebook_path[:60]}...")
+            print(f"  [{idx}/{total_to_scan}] Scanning: {notebook_path[:60]}...")
         
         try:
             content, file_type = export_notebook(notebook_path)
@@ -1932,9 +1960,9 @@ def scan_job_notebooks_with_dependencies(
             if not content:
                 continue
             
-            # Determine source type (direct job notebook or nested dependency)
-            is_direct = notebook_path in job_notebooks
-            source_type = "JOB" if is_direct else "JOB_DEPENDENCY"
+            # All notebooks in this function are dependencies (not direct job tasks)
+            source_type = "JOB_DEPENDENCY"
+            referenced_by = _get_referenced_by_jobs(notebook_path)
             
             # Scan for patterns
             findings = scan_content_for_patterns(content, file_type, APPLICABLE_PATTERNS)
@@ -1945,12 +1973,13 @@ def scan_job_notebooks_with_dependencies(
                     results.append({
                         "scan_timestamp": datetime.now().isoformat(),
                         "source_type": source_type,
-                        "job_id": None,  # Could be multiple jobs referencing this
+                        "job_id": None,
                         "job_name": None,
                         "job_link": None,
                         "task_name": None,
                         "notebook_path": notebook_path,
                         "notebook_link": get_notebook_link(notebook_path),
+                        "referenced_by_jobs": referenced_by,
                         **finding
                     })
                 if verbose:
@@ -1965,6 +1994,7 @@ def scan_job_notebooks_with_dependencies(
                     "task_name": None,
                     "notebook_path": notebook_path,
                     "notebook_link": get_notebook_link(notebook_path),
+                    "referenced_by_jobs": referenced_by,
                     "breaking_change_id": "CLEAN",
                     "breaking_change_name": "No Issues Found",
                     "severity": "OK",
@@ -2098,6 +2128,7 @@ def scan_workspace_path(
                                         "task_name": None,
                                         "notebook_path": obj.path,
                                         "notebook_link": get_notebook_link(obj.path),
+                                        "referenced_by_jobs": None,
                                         **finding
                                     })
                                 if verbose:
@@ -2113,6 +2144,7 @@ def scan_workspace_path(
                                     "task_name": None,
                                     "notebook_path": obj.path,
                                     "notebook_link": get_notebook_link(obj.path),
+                                    "referenced_by_jobs": None,
                                     "breaking_change_id": "CLEAN",
                                     "breaking_change_name": "No Issues Found",
                                     "severity": "OK",
@@ -2186,6 +2218,7 @@ RESULT_SCHEMA = StructType([
     StructField("line_content", StringType(), True),
     StructField("description", StringType(), True),
     StructField("remediation", StringType(), True),
+    StructField("referenced_by_jobs", StringType(), True),
 ])
 
 # COMMAND ----------
@@ -2273,12 +2306,59 @@ print("     3. Buffers are cleared, scan continues")
 initialize_batch_system(SCAN_ID, is_resume=is_resume_scan)
 print()
 
+def _build_dependency_job_mapping(
+    dependency_notebooks: set,
+    direct_job_notebooks: List[str],
+    notebook_to_jobs_map: Dict
+) -> Dict:
+    """
+    Build a mapping from dependency notebook paths to the jobs that use them.
+    
+    Dependency notebooks (found via %run / dbutils.notebook.run) are not directly 
+    listed in job tasks, so we trace them back: if notebook A is a direct job task
+    for Job X, and notebook A %run's notebook B, then notebook B is 
+    "referenced by Job X" (indirectly).
+    
+    For simplicity, we assign each dependency the union of all jobs that reference
+    any of the direct job notebooks (since dependency resolution doesn't track 
+    which specific parent triggered each dependency).
+    
+    Args:
+        dependency_notebooks: Set of notebook paths that are dependencies (not direct job tasks)
+        direct_job_notebooks: List of notebook paths that are direct job tasks
+        notebook_to_jobs_map: Mapping of direct notebook_path → [(job_id, job_name)]
+    
+    Returns:
+        Dict mapping each dependency notebook path → [(job_id, job_name)]
+    """
+    # Collect all jobs that reference any direct notebook 
+    # (since we know these dependencies came from direct job notebooks)
+    all_parent_jobs = []
+    for nb in direct_job_notebooks:
+        for entry in notebook_to_jobs_map.get(nb, []):
+            if entry not in all_parent_jobs:
+                all_parent_jobs.append(entry)
+    
+    # Each dependency notebook gets the full set of parent jobs
+    # This is a simplification - ideally we'd track exactly which parent
+    # triggered each dependency, but that requires more complex graph traversal
+    dep_mapping = {}
+    for dep_nb in dependency_notebooks:
+        # Check if this dependency is also a direct job notebook (it has its own mapping)
+        if dep_nb in notebook_to_jobs_map:
+            dep_mapping[dep_nb] = notebook_to_jobs_map[dep_nb]
+        else:
+            dep_mapping[dep_nb] = all_parent_jobs
+    
+    return dep_mapping
+
 # Collect job notebooks first if in jobs_only_mode (for filtering workspace scan)
 job_related_notebooks = None
+notebook_to_jobs_map = {}  # Initialize outside conditional block
 if CONFIG.get("jobs_only_mode") or CONFIG.get("include_nested_notebooks"):
     print("COLLECTING JOB NOTEBOOKS...")
     print("-" * 40)
-    _, job_notebook_paths = scan_all_jobs(
+    _, job_notebook_paths, notebook_to_jobs_map = scan_all_jobs(
         scan_id=SCAN_ID,
         max_jobs=CONFIG.get("max_jobs"),
         dry_run=False,  # Need to collect notebooks even in dry_run
@@ -2305,7 +2385,7 @@ if CONFIG.get("jobs_only_mode") or CONFIG.get("include_nested_notebooks"):
 if CONFIG["scan_jobs"]:
     print("SCANNING JOBS...")
     print("-" * 40)
-    job_results, _ = scan_all_jobs(
+    job_results, _, notebook_to_jobs_map_scan = scan_all_jobs(
         scan_id=SCAN_ID,
         max_jobs=CONFIG.get("max_jobs"),
         dry_run=CONFIG.get("dry_run", False),
@@ -2314,6 +2394,15 @@ if CONFIG["scan_jobs"]:
         activity_days=CONFIG.get("job_activity_days", 365),
         collect_notebooks_only=False  # Actually scan this time
     )
+    # Update the mapping (Phase 3 may have scanned a different subset due to checkpointing)
+    if notebook_to_jobs_map_scan:
+        for nb_path, job_list in notebook_to_jobs_map_scan.items():
+            if nb_path not in notebook_to_jobs_map:
+                notebook_to_jobs_map[nb_path] = job_list
+            else:
+                for entry in job_list:
+                    if entry not in notebook_to_jobs_map[nb_path]:
+                        notebook_to_jobs_map[nb_path].append(entry)
     # Results are written incrementally, no need to extend all_results
     print(f"Jobs scan complete: {len(job_results)} findings")
     print()
@@ -2328,12 +2417,19 @@ if CONFIG.get("include_nested_notebooks") and job_related_notebooks:
     nested_notebooks = job_related_notebooks - already_scanned_in_jobs
     
     if nested_notebooks:
+        # Build dependency-aware mapping: for each dependency notebook, 
+        # trace back which jobs ultimately reference it through the dependency chain
+        dep_notebook_to_jobs = _build_dependency_job_mapping(
+            nested_notebooks, job_notebook_paths, notebook_to_jobs_map
+        )
+        
         nested_results = scan_job_notebooks_with_dependencies(
             scan_id=SCAN_ID,
             job_notebooks=list(nested_notebooks),
             include_nested=False,  # Already resolved, no need to recurse
             dry_run=CONFIG.get("dry_run", False),
-            verbose=CONFIG.get("verbose", True)
+            verbose=CONFIG.get("verbose", True),
+            notebook_to_jobs=dep_notebook_to_jobs
         )
         # Results are written incrementally, no need to extend all_results
         print(f"Nested notebooks scan complete: {len(nested_results)} findings")

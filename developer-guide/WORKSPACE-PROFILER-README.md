@@ -201,10 +201,10 @@ Results are written to the configured Delta table with this schema:
 | Column | Type | Description |
 |--------|------|-------------|
 | `notebook_path` | STRING | Full path to the notebook |
-| `source_type` | STRING | JOB, WORKSPACE, or JOB_DEPENDENCY |
-| `job_id` | STRING | Job ID (if from job scan) |
-| `job_name` | STRING | Job name (if from job scan) |
-| `task_key` | STRING | Task key within job |
+| `source_type` | STRING | `JOB` (direct job task notebook), `JOB_DEPENDENCY` (notebook referenced via `%run`/`dbutils.notebook.run`), or `WORKSPACE` (found via workspace traversal) |
+| `job_id` | LONG | Job ID (populated for `JOB` rows; `NULL` for `JOB_DEPENDENCY` and `WORKSPACE` rows) |
+| `job_name` | STRING | Job name (populated for `JOB` rows; `NULL` for `JOB_DEPENDENCY` and `WORKSPACE` rows) |
+| `task_name` | STRING | Task key within job (populated for `JOB` rows only) |
 | `breaking_change_id` | STRING | Pattern ID (e.g., BC-17.3-001) |
 | `breaking_change_name` | STRING | Pattern name |
 | `severity` | STRING | HIGH, MEDIUM, LOW, or OK |
@@ -213,6 +213,7 @@ Results are written to the configured Delta table with this schema:
 | `line_content` | STRING | Content of matching line |
 | `description` | STRING | What the pattern detects |
 | `remediation` | STRING | How to fix |
+| `referenced_by_jobs` | STRING | Comma-separated list of jobs that reference this notebook (format: `job_name (id: 123), ...`). Populated for both `JOB` and `JOB_DEPENDENCY` rows. `NULL` for `WORKSPACE` rows. |
 | `scan_id` | STRING | Unique scan identifier |
 | `target_dbr_version` | STRING | Target DBR version |
 
