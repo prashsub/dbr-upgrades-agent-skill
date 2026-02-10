@@ -5,9 +5,9 @@ license: Apache-2.0
 compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
-  databricks-skill-version: "4.0.0"
+  databricks-skill-version: "5.0.0"
   databricks-skill-category: platform-migration
-  databricks-skill-last-updated: "2026-01-26"
+  databricks-skill-last-updated: "2026-02-10"
 allowed-tools: Read Write Bash(grep:*) Bash(find:*) Bash(python:*)
 ---
 
@@ -51,11 +51,13 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 - `{SCAN_DATE}` / `{FIX_DATE}` / `{VALIDATION_DATE}` → Current date/time (YYYY-MM-DD HH:MM)
 - `{TARGET_VERSION}` → Target DBR version (e.g., "17.3")
 - `{AUTO_FIX_COUNT}` → Number of auto-fixable issues
+- `{ASSISTED_FIX_COUNT}` → Number of assisted fix items (snippet provided, developer decides)
 - `{MANUAL_REVIEW_COUNT}` → Number of manual review items
-- `{CONFIG_CHECK_COUNT}` → Number of config check items
 - `{AUTO_FIX_ITEMS}` / `{APPLIED_FIXES}` → Table rows with findings/fixes
+- `{ASSISTED_FIX_ITEMS}` → Table rows for assisted fix items
+- `{ASSISTED_FIX_SNIPPETS}` → Code snippet blocks for each assisted fix
+- `{ASSISTED_FIX_VALIDATION}` → Validation status for each assisted fix
 - `{MANUAL_REVIEW_ITEMS}` → Table rows for manual review items
-- `{CONFIG_CHECK_ITEMS}` → Table rows for config items
 
 **Example table row format:**
 ```
@@ -73,8 +75,8 @@ with open('assets/markdown-templates/scan-summary.md', 'r') as f:
 summary = template.replace('{SCAN_DATE}', '2026-01-26 14:30')
 summary = summary.replace('{TARGET_VERSION}', '17.3')
 summary = summary.replace('{AUTO_FIX_COUNT}', '5')
-summary = summary.replace('{MANUAL_REVIEW_COUNT}', '2')
-summary = summary.replace('{CONFIG_CHECK_COUNT}', '1')
+summary = summary.replace('{ASSISTED_FIX_COUNT}', '2')
+summary = summary.replace('{MANUAL_REVIEW_COUNT}', '1')
 summary = summary.replace('{AUTO_FIX_ITEMS}', 
     '| 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |\n' +
     '| 89 | BC-15.4-003 | `IF !condition` | Replace with `IF NOT condition` |')
@@ -84,6 +86,163 @@ summary = summary.replace('{AUTO_FIX_ITEMS}',
 ```
 
 > 📝 **See `assets/markdown-templates/README.md` for complete template documentation.**
+
+### CRITICAL: How to Generate `{ASSISTED_FIX_SNIPPETS}` — Actual Copy-Paste Fixes
+
+**This is the most important variable.** The agent MUST read the actual code around each finding and generate a real, copy-paste-ready replacement — NOT a generic example. Each snippet must use the exact variable names, function names, view names, return types, and expressions from the developer's code.
+
+**Workflow for EACH Assisted Fix finding:**
+1. **READ** the code: Read 5-10 lines around the detected pattern to understand context
+2. **EXTRACT** real names: Pull the actual variable names, function names, view names, UDF return types, column names, etc. from the code
+3. **GENERATE** the fix: Write the replacement code using those exact extracted names — the developer should be able to copy-paste it directly
+4. **SHOW** before → after: Include the original line(s) as a comment, then the fixed version
+5. **ADD** a review note: Explain what to verify before applying
+
+**Per-BC-ID generation instructions:**
+
+#### BC-SC-002: Temp View Reuse
+1. Read the file and find all `createOrReplaceTempView("X")` calls
+2. Identify which view name `"X"` is used more than once
+3. For EACH duplicate occurrence, generate the replacement using the actual view name and the actual DataFrame variable name from that line
+4. Warn about downstream `spark.table("X")` or `spark.sql("SELECT ... FROM X")` calls
+
+```
+# MAGIC #### 🔧 BC-SC-002: Temp view `"{actual_view_name}"` reused (lines {line1}, {line2})
+# MAGIC
+# MAGIC **Original (line {line1}):** `{actual_df_var}.createOrReplaceTempView("{actual_view_name}")`
+# MAGIC **Original (line {line2}):** `{actual_df_var_2}.createOrReplaceTempView("{actual_view_name}")`
+# MAGIC
+# MAGIC ```python
+# MAGIC import uuid
+# MAGIC
+# MAGIC # Line {line1}:
+# MAGIC {actual_view_name}_1 = f"{actual_view_name}_{uuid.uuid4().hex[:8]}"
+# MAGIC {actual_df_var}.createOrReplaceTempView({actual_view_name}_1)
+# MAGIC
+# MAGIC # Line {line2}:
+# MAGIC {actual_view_name}_2 = f"{actual_view_name}_{uuid.uuid4().hex[:8]}"
+# MAGIC {actual_df_var_2}.createOrReplaceTempView({actual_view_name}_2)
+# MAGIC ```
+# MAGIC ⚠️ Also update `spark.table("{actual_view_name}")` and SQL references to use the new unique names.
+```
+
+#### BC-SC-003: UDF Late Binding
+1. Read the `@udf(...)` decorator to get the return type (e.g., `"double"`, `StringType()`)
+2. Read the function definition: name, parameters, body
+3. Identify which variables in the body are defined OUTSIDE the function
+4. Generate a factory function that takes those external variables as parameters
+5. Show the original code and the replacement side by side
+
+```
+# MAGIC #### 🔧 BC-SC-003: UDF `{actual_func_name}` captures external variable `{actual_var_name}`
+# MAGIC
+# MAGIC **Original (lines {def_line}-{end_line}):**
+# MAGIC ```python
+# MAGIC {paste the original @udf + def block exactly as found}
+# MAGIC ```
+# MAGIC
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC def make_{actual_func_name}_udf({actual_var_name}):
+# MAGIC     @udf({actual_return_type})
+# MAGIC     def {actual_func_name}({actual_params}):
+# MAGIC         {actual_body_using_param_instead_of_external_var}
+# MAGIC     return {actual_func_name}
+# MAGIC
+# MAGIC {actual_func_name} = make_{actual_func_name}_udf({actual_var_name})
+# MAGIC ```
+# MAGIC ⚠️ Confirm `{actual_var_name}` should be locked at its value when the UDF is created ({value_at_definition}), not at execution time ({value_later}).
+```
+
+#### BC-SC-004: Schema Access in Loops
+1. Read the loop and find where `df.columns`, `df.schema`, or `df.dtypes` is accessed
+2. Generate a cache statement BEFORE the loop using the actual DataFrame variable name
+3. Replace the in-loop access with the cached variable
+
+```
+# MAGIC #### 🔧 BC-SC-004: `{actual_df}.columns` accessed inside loop (line {line})
+# MAGIC
+# MAGIC **Original:** `{paste the actual loop code with df.columns}`
+# MAGIC
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC # Add BEFORE the loop:
+# MAGIC cached_columns = set({actual_df}.columns)
+# MAGIC
+# MAGIC # Inside loop — replace {actual_df}.columns with cached_columns:
+# MAGIC {paste the fixed loop code}
+# MAGIC ```
+# MAGIC ℹ️ In Spark Connect, `.columns` triggers an RPC each call. Caching avoids repeated round-trips.
+```
+
+#### BC-17.3-005: Decimal Precision
+1. Read the line with the `DecimalType` or `.cast("decimal")` call
+2. If already explicit `DecimalType(p, s)` — note it and skip
+3. If bare — copy the original expression and show the fixed version
+
+```
+# MAGIC #### 🔧 BC-17.3-005: Decimal precision at line {line}
+# MAGIC
+# MAGIC **Original:** `{paste the actual expression}`
+# MAGIC **Replacement:** `{same expression with explicit DecimalType(10, 2)}`
+# MAGIC
+# MAGIC ℹ️ Adjust (10, 2) to match your data's precision needs. This only affects execution plans, not results.
+```
+
+#### BC-17.3-002: Auto Loader Incremental Listing
+1. Read the Auto Loader code block
+2. Check if `.option("cloudFiles.useIncrementalListing", ...)` already exists
+3. If not, generate the fixed version with the option inserted
+
+```
+# MAGIC #### 🔧 BC-17.3-002: Auto Loader at line {line}
+# MAGIC
+# MAGIC **Original:**
+# MAGIC ```python
+# MAGIC {paste the actual readStream...format("cloudFiles")...load() block}
+# MAGIC ```
+# MAGIC
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC {same block with .option("cloudFiles.useIncrementalListing", "auto") inserted}
+# MAGIC ```
+# MAGIC ℹ️ Test first: Only add if Auto Loader is slower on DBR 17.3.
+```
+
+#### BC-15.4-005 / BC-15.4-002 / BC-13.3-002 / BC-16.4-003: Config-based Fixes
+1. Read the actual read operation to identify what data source is being used
+2. Generate a commented config line to place BEFORE the read operation
+
+```
+# MAGIC #### 🔧 {BC-ID}: {description} at line {line}
+# MAGIC
+# MAGIC **Original:** `{paste the actual read line}`
+# MAGIC
+# MAGIC **Add BEFORE the read (uncomment after testing if behavior differs):**
+# MAGIC ```python
+# MAGIC # {the specific spark.conf.set line for this BC-ID}
+# MAGIC ```
+# MAGIC ℹ️ Test first on DBR 17.3 and compare results. Only uncomment if behavior changed.
+```
+
+#### BC-16.4-004: MERGE materializeSource=none
+1. Read the actual config line
+2. Generate the replacement with `"auto"` instead of `"none"`
+
+```
+# MAGIC #### 🔧 BC-16.4-004: materializeSource=none at line {line}
+# MAGIC
+# MAGIC **Original:** `{paste the actual line}`
+# MAGIC **Replacement:** `{same line with "none" replaced by "auto"}`
+```
+
+**Key rules:**
+- **NEVER use placeholder names** like `[view_name]` or `{udf_name}`. Use the ACTUAL names from the code.
+- **ALWAYS read the surrounding code** before generating a snippet. Do not guess names.
+- **ALWAYS show the original code** so the developer can see what's being replaced.
+- **For BC-SC-003:** Copy the actual function body and only change the variable reference to use the factory parameter.
+- **For BC-SC-002:** Use the actual DataFrame variable name from the line (e.g., `df_batch1`, not `df`).
+- **If no findings for a BC-ID:** Omit that BC-ID's snippet block entirely.
 
 ---
 
@@ -119,12 +278,12 @@ If the user is migrating FROM a specific version, skip patterns that were alread
 
 ---
 
-## CRITICAL: Three Categories of Findings
+## CRITICAL: Three Tiers of Findings
 
 When scanning code, categorize ALL findings into these three categories and handle them appropriately:
 
 ### 🔴 Category 1: AUTO-FIX (10 patterns)
-**Action: Automatically apply the fix**
+**Action: Automatically apply the fix. No developer review needed.**
 
 | ID | Pattern | Fix |
 |----|---------|-----|
@@ -139,37 +298,40 @@ When scanning code, categorize ALL findings into these three categories and hand
 | BC-16.4-001g | `.view.force` | Replace with `.view.to(List)` |
 | BC-16.4-001i | `'symbol` literal | Replace with `Symbol("symbol")` |
 
-### 🟡 Category 2: MANUAL REVIEW (12 patterns)
-**Action: FLAG for developer review with specific guidance**
+### 🔧 Category 2: ASSISTED FIX (11 patterns)
+**Action: Generate an exact suggested fix snippet in the scan output. Developer reviews and decides whether to apply.**
+
+The agent analyzes the code context and produces a copy-paste-ready fix for each finding. The developer can accept, modify, or reject each suggestion.
+
+| ID | Pattern | Suggested Fix Snippet the Agent Generates |
+|----|---------|-------------------------------------------|
+| BC-SC-002 | Same temp view name used multiple times | UUID-suffixed replacement for each duplicate view name, plus reminder to update `spark.table()` references |
+| BC-SC-003 | UDF referencing external variables | Factory wrapper around the detected UDF, passing the captured variable as a parameter |
+| BC-SC-004 | `df.columns` / `df.schema` in loops | Cache statement before the loop: `existing_columns = set(df.columns)` |
+| BC-17.3-005 | `DecimalType` without explicit precision or bare `cast("decimal")` | Explicit `DecimalType(p, s)` replacement with a suggested precision |
+| BC-13.3-002 | Parquet with timestamps | Commented `spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")` |
+| BC-15.4-002 | JDBC reads (useNullCalendar) | Commented `spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")` |
+| BC-15.4-005 | JDBC reads (general) | Commented `spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")` |
+| BC-16.4-003 | Cached data source reads | Commented `spark.conf.set("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions", "true")` |
+| BC-16.4-004 | `materializeSource.*none` | Replace `"none"` with `"auto"` |
+| BC-16.4-006 | Auto Loader `cleanSource` | Commented config with test-first guidance |
+| BC-17.3-002 | Auto Loader without explicit incremental | `.option("cloudFiles.useIncrementalListing", "auto")` insertion |
+
+### 🟡 Category 3: MANUAL REVIEW (10 patterns)
+**Action: FLAG for developer review. No fix snippet generated because the correct action depends on intent.**
 
 | ID | Pattern | Flag Message |
 |----|---------|--------------|
 | BC-13.3-001 | `MERGE INTO` | **FLAG:** ANSI mode now throws CAST_OVERFLOW. Review type casting for potential overflow |
 | BC-13.3-003 | `overwriteSchema` + dynamic partition | **FLAG:** Cannot combine both. Separate schema evolution from partition overwrites |
+| BC-13.3-004 | MERGE/UPDATE with type mismatch | **FLAG:** ANSI store assignment policy changed. Review types for overflow |
 | BC-15.4-001 | `VariantType()` in UDF | **FLAG:** May throw exception in 15.4+. Test or use StringType + JSON |
 | BC-15.4-004 | `CREATE VIEW (col TYPE)` | **FLAG:** Column types in VIEW not allowed in 15.4+. Remove types, use CAST in SELECT |
 | BC-15.4-006 | `CREATE VIEW` | **FLAG:** Schema binding mode changed. Review schema evolution behavior |
 | BC-16.4-002 | `HashMap`/`HashSet` | **FLAG:** Iteration order changed in Scala 2.13. Don't rely on order |
 | BC-16.4-001h | `collection.Seq` | **FLAG:** Now refers to immutable.Seq. Use explicit import |
 | BC-SC-001 | try/except around DataFrame transforms | **FLAG:** In Spark Connect, errors appear at action time. Add `_ = df.columns` for early validation |
-| BC-SC-003 | UDF referencing external variables | **FLAG:** In Spark Connect, UDFs capture variables at execution time. Use function factory pattern |
-| BC-SC-004 | `df.columns` / `df.schema` in loops | **FLAG:** In Spark Connect, schema access triggers RPC. Cache outside loop: `cols = df.columns` |
-| BC-17.3-003 | `array()`/`map()`/`struct()` with nulls | **FLAG:** Spark Connect handles null literals differently. Handle nulls explicitly |
-| BC-17.3-004 | `DecimalType` | **FLAG:** Spark Connect decimal precision handling differs. Specify precision/scale explicitly |
-
-### ⚙️ Category 3: CONFIG CHECK (8 patterns)
-**Action: FLAG for testing - only add config if results differ**
-
-| ID | Pattern | Flag Message |
-|----|---------|--------------|
-| BC-13.3-002 | Parquet with timestamps | **FLAG:** Test Parquet timestamp reads. If wrong, add: `spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")` |
-| BC-13.3-004 | MERGE/UPDATE with type mismatch | **FLAG:** ANSI store assignment policy changed. If overflow errors, review types |
-| BC-15.4-002 | JDBC reads | **FLAG:** Test JDBC timestamp reads. If wrong, add: `spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")` |
-| BC-15.4-005 | JDBC reads (general) | **FLAG:** Review JDBC timestamp handling |
-| BC-16.4-003 | Cached data source reads | **FLAG:** Cache behavior changed. If issues, set `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` |
-| BC-16.4-004 | `materializeSource.*none` | **FLAG:** `materializeSource=none` not allowed in 16.4+. Remove or change to `auto` |
-| BC-16.4-006 | Auto Loader `cleanSource` | **FLAG:** cleanSource behavior changed. Test file cleanup behavior |
-| BC-17.3-002 | Auto Loader without explicit incremental | **FLAG:** Auto Loader default changed. Test performance; if slow, add: `.option("cloudFiles.useIncrementalListing", "auto")` |
+| BC-17.3-003 | `array()`/`map()`/`struct()` with nulls | **FLAG:** Spark Connect now preserves nulls in literal constructions instead of coercing to defaults. The new behavior is often more correct. Only add `coalesce()` if downstream logic specifically needs the old "null to default" behavior. |
 
 ---
 
@@ -259,6 +421,8 @@ grep -rn "VariantType\s*(" --include="*.py" /path/to/scan
 grep -rn "CREATE.*VIEW.*\(.*\(INT\|STRING\|BIGINT\|DOUBLE\|NOT NULL\|DEFAULT\)" --include="*.sql" /path/to/scan
 ```
 
+### Step 4: Search for ASSISTED FIX Patterns
+
 **BC-SC-002: Temp View Name Reuse**
 ```bash
 grep -rn "createOrReplaceTempView\|createTempView" --include="*.py" --include="*.scala" /path/to/scan
@@ -276,8 +440,6 @@ grep -rn "@udf" --include="*.py" /path/to/scan
 grep -rn "\.columns\|\.schema\|\.dtypes" --include="*.py" /path/to/scan
 # Then check if inside for/while loop
 ```
-
-### Step 4: Search for CONFIG CHECK Patterns
 
 **BC-13.3-002: Parquet Timestamp**
 ```bash
@@ -299,7 +461,7 @@ grep -rn "materializeSource.*none" --include="*.py" --include="*.sql" /path/to/s
 grep -rn "cloudFiles" --include="*.py" /path/to/scan
 ```
 
-### Step 5: Report Findings with THREE CATEGORIES
+### Step 5: Report Findings with THREE TIERS
 
 Format findings as:
 ```
@@ -314,30 +476,56 @@ Format findings as:
   - query.sql:15: CREATE TABLE IF ! EXISTS
   - **FIX:** Replace `!` with `NOT`
 
-### 🟡 MANUAL REVIEW REQUIRED
+### 🔧 ASSISTED FIX (Suggested fix provided -- developer reviews)
 - BC-SC-002: Temp view name reuse found in:
   - etl.py:25: df.createOrReplaceTempView("batch")
-  - etl.py:35: df2.createOrReplaceTempView("batch")  <-- Same name!
-  - **REVIEW:** In Spark Connect, both DataFrames will see the latest data.
-  - **FIX IF NEEDED:** Add UUID: `f"batch_{uuid.uuid4().hex[:8]}"`
+  - etl.py:35: df2.createOrReplaceTempView("batch")  <-- DUPLICATE!
 
-- BC-SC-003: UDF with external variable found in:
+  SUGGESTED FIX (copy-paste ready):
+  ┌─────────────────────────────────────────────────────
+  │ import uuid
+  │ # Line 25:
+  │ unique_view = f"batch_{uuid.uuid4().hex[:8]}"
+  │ df.createOrReplaceTempView(unique_view)
+  │ # Line 35:
+  │ unique_view_2 = f"batch_{uuid.uuid4().hex[:8]}"
+  │ df2.createOrReplaceTempView(unique_view_2)
+  └─────────────────────────────────────────────────────
+
+- BC-SC-003: UDF captures external variable found in:
   - process.py:10: multiplier = 1.0
   - process.py:12: @udf(...) def calc(x): return x * multiplier
-  - **REVIEW:** In Spark Connect, UDF captures `multiplier` at execution time, not definition.
-  - **FIX IF NEEDED:** Use function factory pattern
+  - process.py:18: multiplier = 2.5  <-- Changed after UDF definition!
 
-### ⚙️ CONFIG CHECK (Test first, add config only if needed)
-- BC-17.3-002: Auto Loader found in:
+  SUGGESTED FIX (copy-paste ready):
+  ┌─────────────────────────────────────────────────────
+  │ def make_calc_udf(multiplier):
+  │     @udf("double")
+  │     def calc(x):
+  │         return x * multiplier
+  │     return calc
+  │ calc = make_calc_udf(multiplier)
+  └─────────────────────────────────────────────────────
+
+- BC-17.3-002: Auto Loader without explicit incremental listing:
   - streaming.py:50: spark.readStream.format("cloudFiles")...
-  - **TEST:** Check if job performance is acceptable on new DBR
-  - **FIX IF NEEDED:** Add `.option("cloudFiles.useIncrementalListing", "auto")`
+
+  SUGGESTED FIX (copy-paste ready):
+  ┌─────────────────────────────────────────────────────
+  │ .option("cloudFiles.useIncrementalListing", "auto")
+  └─────────────────────────────────────────────────────
+  ℹ️ Test first: Only add if Auto Loader is slower on DBR 17.3.
+
+### 🟡 MANUAL REVIEW (Human judgment required)
+- BC-17.3-003: array/struct/map construction at line [X] with nullable columns
+  - **FLAG:** Spark Connect now preserves nulls instead of coercing to defaults.
+    The new behavior is often more correct. Only add coalesce() if needed.
 
 ### Summary
 - Files scanned: X
 - 🔴 AUTO-FIX: Y findings (will be fixed)
-- 🟡 MANUAL REVIEW: Z findings (developer decision required)
-- ⚙️ CONFIG CHECK: W findings (test first)
+- 🔧 ASSISTED FIX: Z findings (suggested fixes provided)
+- 🟡 MANUAL REVIEW: W findings (developer decision required)
 ```
 
 ### Step 6: Add Scan Summary as Markdown Cell
@@ -375,8 +563,8 @@ When user asks to fix breaking changes, apply these transformations.
 # MAGIC | Status | Count |
 # MAGIC |--------|-------|
 # MAGIC | ✅ Fixed | X |
-# MAGIC | 🟡 Manual Review (unchanged) | Y |
-# MAGIC | ⚙️ Config Check (unchanged) | Z |
+# MAGIC | 🔧 Assisted Fix (suggested) | Y |
+# MAGIC | 🟡 Manual Review (unchanged) | Z |
 # MAGIC 
 # MAGIC ### ✅ Changes Applied
 # MAGIC 
@@ -392,15 +580,16 @@ When user asks to fix breaking changes, apply these transformations.
 # MAGIC | 15 | `IF ! EXISTS` | `IF NOT EXISTS` |
 # MAGIC | 28 | `IS ! NULL` | `IS NOT NULL` |
 # MAGIC 
+# MAGIC ### 🔧 Assisted Fix (Suggested Fixes Provided)
+# MAGIC | Line | BC-ID | Issue | Suggested Fix |
+# MAGIC |------|-------|-------|---------------|
+# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | UUID-suffixed view names (see snippet) |
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC 
 # MAGIC ### 🟡 Manual Review Still Required
 # MAGIC | Line | BC-ID | Issue | Action Needed |
 # MAGIC |------|-------|-------|---------------|
-# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | Add UUID to view names |
-# MAGIC 
-# MAGIC ### ⚙️ Config Check Still Required
-# MAGIC | Line | BC-ID | Issue | Test Then Add |
-# MAGIC |------|-------|-------|---------------|
-# MAGIC | 30 | BC-17.3-002 | Auto Loader | Test performance first |
+# MAGIC | 90 | BC-17.3-003 | Nulls in array/struct | Review null behavior |
 # MAGIC 
 # MAGIC ### Next Steps
 # MAGIC 1. Review the changes above
@@ -538,9 +727,9 @@ Use the file editing tool to apply changes:
 ✅ Fixes applied!
 
 Changes made:
-- ✅ 4 fixes applied
-- 🟡 1 item still needs manual review
-- ⚙️ 1 item needs config testing
+- ✅ 4 auto-fixes applied
+- 🔧 Assisted fix suggestions provided for developer review
+- 🟡 Manual review items flagged
 
 📋 Summary added as new cell at end of notebook.
 
@@ -595,15 +784,38 @@ grep -rn "scala.jdk.CollectionConverters" --include="*.scala" /path/to/scan
 - Collection operations use new syntax
 - Type annotations are present where needed
 
-### Step 4: Generate Validation Report
+### Step 4: Verify Assisted Fix Items Are Addressed
+
+Re-run the detection patterns for each Assisted Fix item and report status:
+
+| BC-ID | What to Check | Status Values |
+|-------|---------------|---------------|
+| BC-SC-002 | No duplicate temp view names remain | Applied / Not Applied / N/A |
+| BC-SC-003 | UDFs with external variables are wrapped in factory functions | Applied / Not Applied / N/A |
+| BC-SC-004 | Schema access cached outside loops | Applied / Not Applied / N/A |
+| BC-17.3-005 | No bare `cast("decimal")` without explicit precision | Applied / Not Applied / N/A |
+| BC-13.3-002 | Parquet timestamp config line present if Parquet reads exist | Applied / Not Applied / N/A |
+| BC-15.4-002 | JDBC config line present if JDBC reads exist | Applied / Not Applied / N/A |
+| BC-15.4-005 | JDBC config line present if JDBC reads exist | Applied / Not Applied / N/A |
+| BC-16.4-003 | Cache config line present if cached reads exist | Applied / Not Applied / N/A |
+| BC-16.4-004 | `materializeSource=none` replaced with `auto` | Applied / Not Applied / N/A |
+| BC-16.4-006 | cleanSource config reviewed | Applied / Not Applied / N/A |
+| BC-17.3-002 | Auto Loader has explicit incremental listing option | Applied / Not Applied / N/A |
+
+### Step 5: Verify Manual Review Items Are Acknowledged
+
+Check that each manual review item has been either:
+- **Addressed** by the developer
+- **Acknowledged** as acceptable with documented reason
+
+### Step 6: Generate Validation Report
 
 ```
 ## Validation Report
 
-### Breaking Patterns Check
+### Auto-Fix Validation
 ✅ No input_file_name() found
 ✅ No '!' syntax for NOT found  
-✅ No VariantType in Python UDFs found
 ✅ No deprecated Scala imports found
 
 ### Replacement Verification
@@ -611,10 +823,19 @@ grep -rn "scala.jdk.CollectionConverters" --include="*.scala" /path/to/scan
 ✅ Found 5 instances of NOT syntax
 ✅ Found 2 instances of CollectionConverters
 
+### Assisted Fix Validation
+✅ BC-SC-002: Applied - Unique view names confirmed
+✅ BC-SC-003: Applied - Factory pattern wrapping external variables
+✅ BC-17.3-002: Applied - Explicit incremental listing option added
+⚠️ BC-15.4-005: Not Applied - JDBC config line not yet added (awaiting test)
+
+### Manual Review Status
+✅ BC-17.3-003: [REVIEWED] - Developer confirmed null preservation is acceptable
+
 ### Summary
 Status: ✅ PASSED - Ready for DBR 17.3 upgrade
 Files validated: 15
-All breaking changes resolved
+All breaking changes addressed
 ```
 
 ---
@@ -747,9 +968,9 @@ grep -rn "cloudFiles" ./notebooks/
 ```
 Found:
 - etl_job.py:42 - input_file_name() [AUTO-FIX]
-- etl_job.py:55 - createOrReplaceTempView("batch") [MANUAL REVIEW - check for reuse]
-- etl_job.py:85 - createOrReplaceTempView("batch") [MANUAL REVIEW - same name reused!]
-- streaming.py:30 - cloudFiles [CONFIG CHECK]
+- etl_job.py:55 - createOrReplaceTempView("batch") [ASSISTED FIX - duplicate name]
+- etl_job.py:85 - createOrReplaceTempView("batch") [ASSISTED FIX - same name reused!]
+- streaming.py:30 - cloudFiles [ASSISTED FIX]
 ```
 
 ### 3. FIX auto-fixable items
@@ -757,34 +978,30 @@ Found:
 - Replace `input_file_name()` with `_metadata.file_name`
 - Write updated file
 
-### 4. FLAG manual review items
+### 4. FLAG assisted fix items (with suggested code snippets)
 ```
-🟡 MANUAL REVIEW REQUIRED: BC-SC-002 in etl_job.py
+🔧 ASSISTED FIX: BC-SC-002 in etl_job.py
 
 The temp view name "batch" is used on both line 55 and line 85.
 
-In Spark Connect (Serverless), this causes data conflicts - both DataFrames 
-will see the data from the LAST createOrReplaceTempView call.
+SUGGESTED FIX (copy-paste ready):
+┌─────────────────────────────────────────────────────
+│ import uuid
+│ # Line 55:
+│ unique_view = f"batch_{uuid.uuid4().hex[:8]}"
+│ df.createOrReplaceTempView(unique_view)
+│ # Line 85:
+│ unique_view_2 = f"batch_{uuid.uuid4().hex[:8]}"
+│ df2.createOrReplaceTempView(unique_view_2)
+└─────────────────────────────────────────────────────
 
-RECOMMENDATION: Add UUID to view names:
-  - Line 55: `f"batch_{uuid.uuid4().hex[:8]}"`
-  - Line 85: Use a different base name, or add UUID
+🔧 ASSISTED FIX: BC-17.3-002 in streaming.py
 
-Do you want me to apply this fix? (Y/N)
-```
-
-### 5. FLAG config items
-```
-⚙️ CONFIG CHECK: BC-17.3-002 in streaming.py
-
-Auto Loader is used without explicit `useIncrementalListing` setting.
-The default changed from "auto" to "false" in DBR 17.3.
-
-TEST FIRST: Run the streaming job on DBR 17.3 and check performance.
-
-IF SLOWER: Add `.option("cloudFiles.useIncrementalListing", "auto")`
-
-No automatic fix applied - testing required first.
+SUGGESTED FIX (copy-paste ready):
+┌─────────────────────────────────────────────────────
+│ .option("cloudFiles.useIncrementalListing", "auto")
+└─────────────────────────────────────────────────────
+ℹ️ Test first: Only add if Auto Loader is slower on DBR 17.3.
 ```
 
 ### 6. ADD SCAN SUMMARY as Markdown Cell
@@ -802,28 +1019,24 @@ No automatic fix applied - testing required first.
 # MAGIC | Category | Count |
 # MAGIC |----------|-------|
 # MAGIC | 🔴 Auto-Fix | 1 |
-# MAGIC | 🟡 Manual Review | 1 |
-# MAGIC | ⚙️ Config Check | 1 |
+# MAGIC | 🔧 Assisted Fix | 2 |
+# MAGIC | 🟡 Manual Review | 0 |
 # MAGIC 
 # MAGIC ### 🔴 Auto-Fix Required
 # MAGIC | Line | BC-ID | Pattern | Fix |
 # MAGIC |------|-------|---------|-----|
 # MAGIC | 42 | BC-17.3-001 | `input_file_name()` | Replace with `_metadata.file_name` |
 # MAGIC 
-# MAGIC ### 🟡 Manual Review Required
-# MAGIC | Line | BC-ID | Issue | Action |
-# MAGIC |------|-------|-------|--------|
-# MAGIC | 55,85 | BC-SC-002 | Temp view "batch" reused | Add UUID |
-# MAGIC 
-# MAGIC ### ⚙️ Config Check (Test First)
-# MAGIC | Line | BC-ID | Issue | Config If Needed |
-# MAGIC |------|-------|-------|------------------|
+# MAGIC ### 🔧 Assisted Fix (Review Suggested Code)
+# MAGIC | Line | BC-ID | Issue | Suggested Fix |
+# MAGIC |------|-------|-------|---------------|
+# MAGIC | 55,85 | BC-SC-002 | Temp view "batch" reused | UUID-suffixed names (see snippet) |
 # MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
 # MAGIC 
 # MAGIC ### Next Steps
 # MAGIC 1. Run: `@databricks-dbr-migration fix all auto-fixable issues`
-# MAGIC 2. Review manual items above
-# MAGIC 3. Test config changes on DBR 17.3
+# MAGIC 2. Review assisted fix snippets above and apply as appropriate
+# MAGIC 3. Test on DBR 17.3
 ```
 
 ### 7. REPORT to User
@@ -836,8 +1049,8 @@ After adding the summary cell, tell the user:
 
 Summary:
 - 🔴 Auto-fixable: 1 issue
-- 🟡 Manual review: 1 issue  
-- ⚙️ Config check: 1 issue
+- 🔧 Assisted fix: 2 issues with suggested code
+- 🟡 Manual review: 0 issues
 
 Run `@databricks-dbr-migration fix all auto-fixable issues` to apply fixes.
 ```

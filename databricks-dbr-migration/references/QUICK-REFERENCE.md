@@ -198,6 +198,6 @@ A condensed reference for all breaking changes. Use this to quickly explain issu
 | Category | Count | IDs |
 |----------|-------|-----|
 | 🔴 Auto-Fix | 10 | BC-17.3-001, BC-15.4-003, BC-16.4-001a-i |
-| 🟡 Manual Review | 12 | BC-13.3-001/003, BC-15.4-001/004/006, BC-16.4-002, BC-SC-001/003/004, BC-17.3-003/004 |
-| ⚙️ Config Check | 8 | BC-13.3-002/004, BC-15.4-002/005, BC-16.4-003/004/006, BC-17.3-002 |
-| **Total** | **35** | All patterns |
+| 🟠 Assisted Fix | 11 | BC-SC-002/003, BC-17.3-005, BC-13.3-002/004, BC-15.4-002/005, BC-16.4-003/004/006, BC-17.3-002 |
+| 🟡 Manual Review | 10 | BC-13.3-001/003, BC-15.4-001/004/006, BC-16.4-002, BC-SC-001/004, BC-17.3-003/004 |
+| **Total** | **31** | All patterns |

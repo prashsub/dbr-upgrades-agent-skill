@@ -49,3 +49,6 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Customer
+7-Eleven/

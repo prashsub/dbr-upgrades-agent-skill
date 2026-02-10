@@ -1635,7 +1635,7 @@ These breaking changes are about **default behavior changes**. You may not need 
 
 ---
 
-### ⚙️ Config: BC-13.3-002 (Parquet Timestamp NTZ)
+### 🟠 Assisted Fix: BC-13.3-002 (Parquet Timestamp NTZ)
 
 **What changed:** How Parquet files infer `TIMESTAMP_NTZ` type.
 
@@ -1666,7 +1666,7 @@ df = spark.read.parquet("/path/to/data")
 
 ---
 
-### ⚙️ Config: BC-15.4-002 (JDBC useNullCalendar)
+### 🟠 Assisted Fix: BC-15.4-002 (JDBC useNullCalendar)
 
 **What changed:** Default for `spark.sql.legacy.jdbc.useNullCalendar` changed to `true`.
 
@@ -1689,7 +1689,7 @@ df = spark.read.jdbc(url, table)
 
 ---
 
-### ⚙️ Config: BC-16.4-004 (MERGE materializeSource=none)
+### 🟠 Assisted Fix: BC-16.4-004 (MERGE materializeSource=none)
 
 **What changed:** Setting `merge.materializeSource` to `none` now throws an error.
 
@@ -1710,7 +1710,7 @@ spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")
 
 ---
 
-### ⚙️ Config: BC-17.3-002 (Auto Loader Incremental Listing)
+### 🟠 Assisted Fix: BC-17.3-002 (Auto Loader Incremental Listing)
 
 **What changed:** Default for `cloudFiles.useIncrementalListing` changed from `auto` to `false`.
 
@@ -1788,8 +1788,8 @@ python validate-migration.py /path/to/notebooks
 | Category | Patterns | Primary Action |
 |----------|----------|----------------|
 | **Auto-Fix** | 10 patterns | Run `apply-fixes.py` |
-| **Manual Review** | 18 patterns | Follow guides in this document |
-| **Config Settings** | 7 patterns | Test first, add config only if needed |
+| **Assisted Fix** | 11 patterns | Review suggested fix snippet, apply if appropriate |
+| **Manual Review** | 10 patterns | Follow guides in this document |
 
 ### Auto-Fix Patterns (10)
 - BC-17.3-001: `input_file_name()`
@@ -1803,34 +1803,31 @@ python validate-migration.py /path/to/notebooks
 - BC-16.4-001g: `.view.force`
 - BC-16.4-001i: Symbol literals
 
-### Manual Review Patterns (18)
+### Assisted Fix Patterns (11)
+- BC-SC-002: Temp view name reuse (UUID snippet provided)
+- BC-SC-003: UDF external variable capture (factory wrapper snippet)
+- BC-17.3-005: Spark Connect decimal precision (explicit DecimalType snippet)
+- BC-13.3-002/002b: Parquet Timestamp NTZ (commented config line)
+- BC-13.3-004: ANSI store assignment policy (commented config line)
+- BC-15.4-002: JDBC useNullCalendar (commented config line)
+- BC-15.4-005: JDBC read timestamp handling (commented config line)
+- BC-16.4-003: Data source cache options (commented config line)
+- BC-16.4-004: MERGE materializeSource (remove or use "auto")
+- BC-16.4-006: Auto Loader cleanSource (commented config line)
+- BC-17.3-002: Auto Loader incremental listing (commented config line)
+
+### Manual Review Patterns (10)
 - BC-13.3-001: MERGE INTO type casting
 - BC-13.3-003: overwriteSchema + dynamic partition
-- BC-14.3-001: Thriftserver config removed
 - BC-15.4-001: VARIANT type in UDF
 - BC-15.4-004: View column type definition
-- BC-15.4-005: JDBC read timestamp handling
 - BC-15.4-006: View schema binding mode
-- BC-16.4-001h: `collection.Seq` import
 - BC-16.4-002: HashMap/HashSet ordering
-- BC-16.4-005: Json4s library version
-- BC-16.4-006: Auto Loader cleanSource
-- BC-17.3-002b: Auto Loader default behavior
-- BC-17.3-003: Spark Connect literal handling
-- BC-17.3-005: Spark Connect decimal precision
 - BC-SC-001: Spark Connect lazy analysis
-- BC-SC-002: Temp view name reuse
-- BC-SC-003: UDF external variable capture
 - BC-SC-004: Schema access in loops
-
-### Config Setting Patterns (7)
-- BC-13.3-002/002b: Parquet Timestamp NTZ
-- BC-13.3-004: ANSI store assignment policy
-- BC-15.4-002: JDBC useNullCalendar
-- BC-16.4-003: Data source cache options
-- BC-16.4-004: MERGE materializeSource
-- BC-17.3-002: Auto Loader incremental listing
+- BC-17.3-003: Spark Connect literal handling
+- BC-17.3-004: Spark Connect decimal precision (plan-level only)
 
 ---
 
-*Last Updated: January 2026*
+*Last Updated: February 2026*

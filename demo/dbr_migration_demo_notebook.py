@@ -24,31 +24,35 @@
 # MAGIC | Category | Count | Action |
 # MAGIC |----------|-------|--------|
 # MAGIC | 🔴 **Auto-Fix** | 10 | Agent automatically applies fix |
-# MAGIC | 🟡 **Manual Review** | 12 | Agent flags for developer decision |
-# MAGIC | ⚙️ **Config** | 8 | Test first, add config if needed |
+# MAGIC | 🔧 **Assisted Fix** | 11 | Agent provides fix snippet, developer reviews |
+# MAGIC | 🟡 **Manual Review** | 10 | Agent flags for developer decision |
 # MAGIC 
 # MAGIC ### Quick Reference Table
 # MAGIC 
-# MAGIC | ID | Severity | Change | DBR | Auto-Fix? |
-# MAGIC |----|----------|--------|-----|-----------|
-# MAGIC | BC-17.3-001 | 🔴 HIGH | `input_file_name()` removed | 17.3 | ✅ Yes |
-# MAGIC | BC-13.3-001 | 🔴 HIGH | MERGE INTO type casting (ANSI) | 13.3 | ❌ Manual |
-# MAGIC | BC-16.4-001a-i | 🔴 HIGH | Scala 2.13 collection changes | 16.4 | ✅ Yes |
-# MAGIC | BC-16.4-002 | 🔴 HIGH | HashMap/HashSet ordering | 16.4 | ❌ Manual |
-# MAGIC | BC-15.4-003 | 🟡 MEDIUM | `!` syntax for NOT | 15.4 | ✅ Yes |
-# MAGIC | BC-15.4-001 | 🟡 MEDIUM | VARIANT in UDF | 15.4+ | ❌ Manual |
-# MAGIC | BC-15.4-004 | 🟢 LOW | VIEW column types | 15.4 | ❌ Manual |
-# MAGIC | BC-15.4-006 | 🟡 MEDIUM | VIEW schema binding mode | 15.4 | ❌ Manual |
-# MAGIC | BC-13.3-003 | 🟡 MEDIUM | overwriteSchema + dynamic partition | 13.3 | ❌ Manual |
-# MAGIC | BC-SC-001 | 🔴 HIGH | Lazy schema analysis | 13.3+ | ❌ Manual |
-# MAGIC | BC-SC-003 | 🟢 LOW | UDF late binding | 14.3+ | ❌ Manual |
-# MAGIC | BC-SC-004 | 🟢 LOW | Schema access in loops | 13.3+ | ❌ Manual |
-# MAGIC | BC-13.3-002 | 🟢 LOW | Parquet timestamp NTZ | 13.3 | ⚙️ Config |
-# MAGIC | BC-15.4-002 | 🟢 LOW | JDBC useNullCalendar | 15.4 | ⚙️ Config |
-# MAGIC | BC-16.4-003 | 🟡 MEDIUM | Data source cache options | 16.4 | ⚙️ Config |
-# MAGIC | BC-16.4-004 | 🟢 LOW | MERGE materializeSource | 16.4 | ⚙️ Config |
-# MAGIC | BC-17.3-002 | 🟡 MEDIUM | Auto Loader incremental listing | 17.3 | ⚙️ Config |
-# MAGIC | BC-17.3-003 | 🟢 LOW | Spark Connect null handling | 17.3 | ❌ Manual |
+# MAGIC | ID | Severity | Change | DBR | Category |
+# MAGIC |----|----------|--------|-----|----------|
+# MAGIC | BC-17.3-001 | 🔴 HIGH | `input_file_name()` removed | 17.3 | 🔴 Auto-Fix |
+# MAGIC | BC-15.4-003 | 🟡 MEDIUM | `!` syntax for NOT | 15.4 | 🔴 Auto-Fix |
+# MAGIC | BC-16.4-001a-i | 🔴 HIGH | Scala 2.13 collection changes | 16.4 | 🔴 Auto-Fix |
+# MAGIC | BC-SC-002 | 🟡 MEDIUM | Temp view name reuse | 13.3+ | 🔧 Assisted Fix |
+# MAGIC | BC-SC-003 | 🟢 LOW | UDF late binding | 14.3+ | 🔧 Assisted Fix |
+# MAGIC | BC-SC-004 | 🟢 LOW | Schema access in loops | 13.3+ | 🔧 Assisted Fix |
+# MAGIC | BC-17.3-005 | 🟢 LOW | Decimal precision defaults | 17.3 | 🔧 Assisted Fix |
+# MAGIC | BC-13.3-002 | 🟢 LOW | Parquet timestamp NTZ | 13.3 | 🔧 Assisted Fix |
+# MAGIC | BC-15.4-002 | 🟢 LOW | JDBC useNullCalendar | 15.4 | 🔧 Assisted Fix |
+# MAGIC | BC-15.4-005 | 🟢 LOW | JDBC read timestamp handling | 15.4 | 🔧 Assisted Fix |
+# MAGIC | BC-16.4-003 | 🟡 MEDIUM | Data source cache options | 16.4 | 🔧 Assisted Fix |
+# MAGIC | BC-16.4-004 | 🟢 LOW | MERGE materializeSource | 16.4 | 🔧 Assisted Fix |
+# MAGIC | BC-16.4-006 | 🟡 MEDIUM | Auto Loader cleanSource | 16.4 | 🔧 Assisted Fix |
+# MAGIC | BC-17.3-002 | 🟡 MEDIUM | Auto Loader incremental listing | 17.3 | 🔧 Assisted Fix |
+# MAGIC | BC-13.3-001 | 🔴 HIGH | MERGE INTO type casting (ANSI) | 13.3 | 🟡 Manual Review |
+# MAGIC | BC-16.4-002 | 🔴 HIGH | HashMap/HashSet ordering | 16.4 | 🟡 Manual Review |
+# MAGIC | BC-15.4-001 | 🟡 MEDIUM | VARIANT in UDF | 15.4+ | 🟡 Manual Review |
+# MAGIC | BC-15.4-004 | 🟢 LOW | VIEW column types | 15.4 | 🟡 Manual Review |
+# MAGIC | BC-15.4-006 | 🟡 MEDIUM | VIEW schema binding mode | 15.4 | 🟡 Manual Review |
+# MAGIC | BC-13.3-003 | 🟡 MEDIUM | overwriteSchema + dynamic partition | 13.3 | 🟡 Manual Review |
+# MAGIC | BC-SC-001 | 🔴 HIGH | Lazy schema analysis | 13.3+ | 🟡 Manual Review |
+# MAGIC | BC-17.3-003 | 🟢 LOW | Spark Connect null handling | 17.3 | 🟡 Manual Review |
 
 # COMMAND ----------
 
@@ -100,6 +104,14 @@ taxi_df.printSchema()
 # MAGIC %md
 # MAGIC ## BC-17.3-001: `input_file_name()` Removed
 # MAGIC 
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC There's a function called `input_file_name()` that many ETL pipelines use to find out **which file a row of data originally came from**. For example, if you read 10 CSV files into a DataFrame, `input_file_name()` tells you "this row came from `file_3.csv`."
+# MAGIC 
+# MAGIC **The problem:** This function has been **completely deleted** in DBR 17.3. If your code calls it, the notebook will crash immediately with an error. It won't just give a warning -- it will **stop your job**.
+# MAGIC 
+# MAGIC **The fix:** Use `_metadata.file_name` instead. This is a built-in hidden column that Spark adds to every DataFrame automatically. It does the same thing, but it's the officially supported way.
+# MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
 # MAGIC The `input_file_name()` function was **deprecated in DBR 13.3** and is **completely removed in DBR 17.3** (Spark 4.0).
@@ -113,9 +125,23 @@ taxi_df.printSchema()
 # MAGIC | **17.3 LTS** | ❌ **REMOVED** - `AnalysisException: Undefined function` |
 # MAGIC 
 # MAGIC ### 📚 Official Documentation
-# MAGIC - [DBR 17.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/17.3lts.html)
-# MAGIC - [Spark 4.0 Migration Guide](https://spark.apache.org/docs/latest/sql-migration-guide.html#upgrading-from-spark-sql-33-to-40)
+# MAGIC 
+# MAGIC > **From [DBR 17.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/17.3lts.html):**
+# MAGIC >
+# MAGIC > *"The `input_file_name` function has been deprecated since Databricks Runtime 13.3 LTS because it is unreliable. The function is no longer supported in Databricks Runtime 17.3 LTS and above because it is unreliable. Use `_metadata.file_name` instead."*
+# MAGIC 
 # MAGIC - [File Metadata Column Documentation](https://docs.databricks.com/en/ingestion/file-metadata-column.html)
+# MAGIC - [Spark 4.0 Migration Guide](https://spark.apache.org/docs/latest/sql-migration-guide.html#upgrading-from-spark-sql-33-to-40)
+# MAGIC - SPARK-53507: Add breaking change info to errors
+# MAGIC 
+# MAGIC ### Why `_metadata.file_name` is Better
+# MAGIC 
+# MAGIC | Feature | `input_file_name()` | `_metadata.file_name` |
+# MAGIC |---------|---------------------|----------------------|
+# MAGIC | Reliability | Unreliable with reused exchanges | Always correct |
+# MAGIC | Performance | Blocks certain optimizations | Part of metadata column |
+# MAGIC | Future support | Removed in Spark 4.0 | Supported long-term |
+# MAGIC | Extra metadata | Only file name | Also: `file_path`, `file_size`, `file_modification_time` |
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
@@ -136,6 +162,15 @@ taxi_df.printSchema()
 # MAGIC | DataFrame API | `input_file_name()` | `col("_metadata.file_name")` |
 # MAGIC | SQL String | `input_file_name()` | `_metadata.file_name` |
 # MAGIC | Pure SQL | `input_file_name()` | `_metadata.file_name` |
+# MAGIC 
+# MAGIC **SQL equivalent:**
+# MAGIC ```sql
+# MAGIC -- BEFORE
+# MAGIC SELECT input_file_name(), col1, col2 FROM my_table
+# MAGIC 
+# MAGIC -- AFTER
+# MAGIC SELECT _metadata.file_name, col1, col2 FROM my_table
+# MAGIC ```
 
 # COMMAND ----------
 
@@ -367,16 +402,20 @@ taxi_df.createOrReplaceTempView("taxi_trips")
 
 # MAGIC %md
 # MAGIC ---
-# MAGIC # 🟡 SECTION 2: MANUAL REVIEW ITEMS
+# MAGIC # 🔧 SECTION 2: ASSISTED FIX & MANUAL REVIEW ITEMS
 # MAGIC 
-# MAGIC These patterns **require developer decision**. The agent flags them but doesn't auto-fix because the correct action depends on context.
+# MAGIC This section covers patterns that **require developer involvement**:
+# MAGIC - **🔧 Assisted Fix** — Agent provides a suggested code snippet; developer reviews and applies
+# MAGIC - **🟡 Manual Review** — Agent flags the pattern; developer decides on the fix using their judgment
+# MAGIC 
+# MAGIC Each item below is labeled with its category.
 # MAGIC 
 # MAGIC ---
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## BC-15.4-001: VARIANT Type in Python UDF
+# MAGIC ## 🟡 BC-15.4-001: VARIANT Type in Python UDF [Manual Review]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -466,7 +505,7 @@ print("Created DataFrame with VARIANT column")
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-15.4-004: VIEW Column Type Definitions
+# MAGIC ## 🟡 BC-15.4-004: VIEW Column Type Definitions [Manual Review]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -533,7 +572,7 @@ print("Created DataFrame with VARIANT column")
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-SC-001: Lazy Schema Analysis (Spark Connect)
+# MAGIC ## 🟡 BC-SC-001: Lazy Schema Analysis (Spark Connect) [Manual Review]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -609,7 +648,15 @@ def analyze_with_misspelled_column():
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-SC-002: Temp View Name Reuse (Spark Connect)
+# MAGIC ## 🔧 BC-SC-002: Temp View Name Reuse (Spark Connect) [Assisted Fix]
+# MAGIC 
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC Think of a temp view like a **whiteboard label** in a shared office. In Spark Classic, each person who writes on the whiteboard gets their own copy -- even if they use the same label. So if Alice writes "batch" with 100 rows and Bob writes "batch" with 500 rows, they each keep their own data.
+# MAGIC 
+# MAGIC In **Spark Connect** (Serverless), the whiteboard is **shared**. If Alice and Bob both use the label "batch," whoever writes last wins -- and Alice's reference now points to Bob's data!
+# MAGIC 
+# MAGIC **When does this apply?** Only if you use **Serverless compute** or **Databricks Connect**. If you're on Classic clusters, this doesn't affect you today (but it will if you switch later).
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -620,6 +667,11 @@ def analyze_with_misspelled_column():
 # MAGIC | View name reused | Each DF keeps original data | ❌ All DFs see new data! |
 # MAGIC 
 # MAGIC ### 📚 Official Documentation
+# MAGIC 
+# MAGIC > **From [Compare Spark Connect to Spark Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic):**
+# MAGIC >
+# MAGIC > *"DataFrames that reference temp views are resolved by name in Spark Connect. If a temp view is replaced, all DataFrames referencing that view name will reflect the new data."*
+# MAGIC 
 # MAGIC - [Spark Connect Overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
 # MAGIC - [Temp Views in Databricks](https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-view.html#temporary-views)
 # MAGIC 
@@ -637,6 +689,10 @@ def analyze_with_misspelled_column():
 # MAGIC | Same name in function called multiple times | 🔴 HIGH | ✅ Add UUID |
 # MAGIC | Different names for different purposes | 🟢 LOW | ❌ No action |
 # MAGIC | View created once, used throughout | 🟢 LOW | ❌ No action |
+# MAGIC 
+# MAGIC ### 💡 How to Spot This
+# MAGIC 
+# MAGIC Search for `createOrReplaceTempView` in your code. If the same string appears in multiple calls, or if the call is inside a loop or a function called multiple times, you have a potential issue.
 
 # COMMAND ----------
 
@@ -670,20 +726,43 @@ print(f"Batch 3 count: {batch_3.count()}")  # Classic: 50, Connect: 50
 # MAGIC %md
 # MAGIC ### ✅ FIX: Use Unique View Names
 # MAGIC 
+# MAGIC **Option A: UUID suffix (guaranteed unique)**
 # MAGIC ```python
 # MAGIC import uuid
 # MAGIC 
 # MAGIC def process_batch(data_size, batch_name):
 # MAGIC     """
-# MAGIC     ✅ GOOD: Unique view name for each call
+# MAGIC     ✅ GOOD: Unique view name for each call (UUID suffix)
 # MAGIC     """
 # MAGIC     df = spark.range(data_size).withColumn("batch", lit(batch_name))
 # MAGIC     
-# MAGIC     # Unique name with UUID
+# MAGIC     # Unique name with UUID -- no collisions possible
 # MAGIC     unique_view = f"batch_{batch_name}_{uuid.uuid4().hex[:8]}"
 # MAGIC     df.createOrReplaceTempView(unique_view)
 # MAGIC     
 # MAGIC     return spark.table(unique_view)
+# MAGIC ```
+# MAGIC 
+# MAGIC **Option B: Descriptive unique names (easier to debug)**
+# MAGIC ```python
+# MAGIC def process_batch(data_size, batch_name):
+# MAGIC     """
+# MAGIC     ✅ GOOD: Unique view name using meaningful identifiers
+# MAGIC     """
+# MAGIC     df = spark.range(data_size).withColumn("batch", lit(batch_name))
+# MAGIC     
+# MAGIC     # Descriptive name -- unique because batch_name is unique per call
+# MAGIC     unique_view = f"batch_{batch_name}_{data_size}"
+# MAGIC     df.createOrReplaceTempView(unique_view)
+# MAGIC     
+# MAGIC     return spark.table(unique_view)
+# MAGIC ```
+# MAGIC 
+# MAGIC **Expected result after fix:**
+# MAGIC ```
+# MAGIC Batch 1 count: 100   ✓ Correct on both Classic and Connect
+# MAGIC Batch 2 count: 500   ✓ Correct on both Classic and Connect
+# MAGIC Batch 3 count: 50    ✓ Correct on both Classic and Connect
 # MAGIC ```
 
 # COMMAND ----------
@@ -691,7 +770,16 @@ print(f"Batch 3 count: {batch_3.count()}")  # Classic: 50, Connect: 50
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-SC-003: UDF Late Binding (Spark Connect)
+# MAGIC ## 🔧 BC-SC-003: UDF Late Binding (Spark Connect) [Assisted Fix]
+# MAGIC 
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC Imagine you're at a restaurant. You tell the waiter "I want the daily special" at noon when it's grilled salmon. But the kitchen doesn't prepare your order until 6pm, by which time the daily special has changed to pasta.
+# MAGIC 
+# MAGIC - In **Spark Classic**: You get grilled salmon (what was the special when you ordered).
+# MAGIC - In **Spark Connect**: You get pasta (what's the special when the kitchen runs your order).
+# MAGIC 
+# MAGIC The same thing happens with UDFs. If your UDF references a variable like `fare_multiplier`, Spark Classic captures its value at definition time, but Spark Connect captures it when the UDF actually runs -- which could be much later, after the variable has changed.
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -702,12 +790,17 @@ print(f"Batch 3 count: {batch_3.count()}")  # Classic: 50, Connect: 50
 # MAGIC | Variable changes after UDF defined | UDF uses old value | ❌ UDF uses new value! |
 # MAGIC 
 # MAGIC ### 📚 Official Documentation
+# MAGIC 
+# MAGIC > **From [Compare Spark Connect to Spark Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic):**
+# MAGIC >
+# MAGIC > *"UDFs in Spark Connect are serialized and sent to the server at execution time. Any variables captured by the UDF closure are evaluated at execution time, not at definition time."*
+# MAGIC 
 # MAGIC - [Spark Connect Overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
 # MAGIC - [User-Defined Functions (UDFs)](https://docs.databricks.com/en/udf/index.html)
 # MAGIC 
 # MAGIC ### 🔍 How the Agent Detects It
 # MAGIC 
-# MAGIC **Pattern:** `@udf` decorators (flagged for manual review)
+# MAGIC **Pattern:** `@udf` decorators (flagged for review)
 # MAGIC 
 # MAGIC **Developer must check:** Does the UDF reference variables defined outside the function?
 # MAGIC 
@@ -719,6 +812,16 @@ print(f"Batch 3 count: {batch_3.count()}")  # Classic: 50, Connect: 50
 # MAGIC | Hardcoded constants | ❌ No action |
 # MAGIC | External variables that NEVER change | ⚠️ Consider fixing |
 # MAGIC | External variables that CHANGE | ✅ **Must fix!** |
+# MAGIC 
+# MAGIC ### 💡 How to Spot This (Red Flag)
+# MAGIC 
+# MAGIC If you see this pattern, it's a red flag:
+# MAGIC ```python
+# MAGIC some_variable = ...           # Defined outside UDF
+# MAGIC @udf("double")
+# MAGIC def my_udf(x):
+# MAGIC     return x * some_variable  # ← References outer variable
+# MAGIC ```
 
 # COMMAND ----------
 
@@ -758,23 +861,39 @@ df_with_surge.select("fare_amount", "surge_fare").show(5)
 # MAGIC %md
 # MAGIC ### ✅ FIX: Function Factory Pattern
 # MAGIC 
+# MAGIC The factory pattern creates a UDF with a specific value **baked in**. Changing the original variable later has no effect.
+# MAGIC 
 # MAGIC ```python
-# MAGIC def make_multiplier_udf(multiplier):
+# MAGIC # THE FACTORY: A function that CREATES a UDF with a specific multiplier baked in
+# MAGIC def make_surge_udf(multiplier):
 # MAGIC     """
-# MAGIC     ✅ GOOD: Value captured at factory call time
+# MAGIC     GOOD PATTERN: The 'multiplier' parameter is captured at the moment
+# MAGIC     you call make_surge_udf(). It's now locked in -- changing the
+# MAGIC     original variable later has no effect on this UDF.
 # MAGIC     """
 # MAGIC     @udf("double")
 # MAGIC     def apply_surge(fare):
-# MAGIC         return fare * multiplier  # Captured in closure
+# MAGIC         return fare * multiplier  # Uses the locked-in value, not a global variable
 # MAGIC     return apply_surge
 # MAGIC 
-# MAGIC # Create with specific values
-# MAGIC multiply_by_1 = make_multiplier_udf(1.0)
-# MAGIC multiply_by_2_5 = make_multiplier_udf(2.5)
+# MAGIC # Step 1: Set the variable to 1.0
+# MAGIC fare_multiplier = 1.0
 # MAGIC 
-# MAGIC # Now it doesn't matter if variables change later
-# MAGIC df.withColumn("surge_1", multiply_by_1(col("fare")))
-# MAGIC df.withColumn("surge_2_5", multiply_by_2_5(col("fare")))
+# MAGIC # Step 2: Create the UDF by passing fare_multiplier INTO the factory
+# MAGIC # The factory captures the CURRENT value (1.0) as a snapshot
+# MAGIC surge_udf = make_surge_udf(fare_multiplier)  # Locks in 1.0
+# MAGIC 
+# MAGIC # Step 3: Change the variable AFTER the UDF was created
+# MAGIC fare_multiplier = 2.5  # Doesn't matter! The UDF already locked in 1.0
+# MAGIC 
+# MAGIC # Step 4: Apply the UDF -- it ALWAYS uses 1.0, regardless of fare_multiplier
+# MAGIC df.withColumn("surge_fare", surge_udf(col("fare_amount")))
+# MAGIC # Uses 1.0 on BOTH Classic and Connect ✓
+# MAGIC 
+# MAGIC # You can also create multiple UDFs with different locked-in values:
+# MAGIC udf_normal  = make_surge_udf(1.0)   # Always multiplies by 1.0
+# MAGIC udf_peak    = make_surge_udf(2.5)   # Always multiplies by 2.5
+# MAGIC udf_holiday = make_surge_udf(3.0)   # Always multiplies by 3.0
 # MAGIC ```
 
 # COMMAND ----------
@@ -782,7 +901,7 @@ df_with_surge.select("fare_amount", "surge_fare").show(5)
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-SC-004: Schema Access in Loops (Spark Connect)
+# MAGIC ## 🔧 BC-SC-004: Schema Access in Loops (Spark Connect) [Assisted Fix]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -871,18 +990,213 @@ print(f"Result columns: {len(result_bad.columns)}")
 
 # MAGIC %md
 # MAGIC ---
-# MAGIC # ⚙️ SECTION 3: CONFIGURATION CHANGES
 # MAGIC 
-# MAGIC These are **behavioral changes** where defaults changed. Code may run but produce different results.
+# MAGIC ## 🟡 BC-17.3-003: Spark Connect Null Handling in Literals [Manual Review]
 # MAGIC 
-# MAGIC **Important:** Test your code first! Only add config if results are wrong.
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC Imagine you have a list: `[1, null, 3]`. In Spark Classic, constructing this as an array literal would **silently replace** the null with a default value (like `0`), giving you `[1, 0, 3]`. In Spark Connect, the null is **preserved** as `[1, null, 3]`.
+# MAGIC 
+# MAGIC The new behavior is actually **more correct** -- a null should stay a null. But if your downstream code assumed nulls were already gone (e.g., doing `sum()` without handling nulls), you might get unexpected results.
+# MAGIC 
+# MAGIC ### 📖 What Changed
+# MAGIC 
+# MAGIC In **Spark Connect** (Serverless), `array()`, `map()`, and `struct()` literal constructions now **preserve nulls** instead of coercing them to type defaults.
+# MAGIC 
+# MAGIC | Construction | Spark Classic | Spark Connect |
+# MAGIC |-------------|--------------|---------------|
+# MAGIC | `array(lit(1), lit(None), lit(3))` | `[1, 0, 3]` | `[1, null, 3]` |
+# MAGIC | `struct(lit("a"), lit(None))` | `("a", "")` | `("a", null)` |
+# MAGIC | `map(lit("k"), lit(None))` | `{"k": 0}` | `{"k": null}` |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC 
+# MAGIC > **From [DBR 17.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/17.3lts.html):**
+# MAGIC >
+# MAGIC > *"Spark Connect literal handling has been updated to correctly represent null values in array, map, and struct constructions. Previously, null values were coerced to type defaults."*
+# MAGIC 
+# MAGIC - SPARK-53553: Spark Connect literal null handling
+# MAGIC - [Compare Spark Connect to Spark Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic)
+# MAGIC 
+# MAGIC ### 🔍 How the Agent Detects It
+# MAGIC 
+# MAGIC **Detection Patterns:**
+# MAGIC ```
+# MAGIC \b(array|map|struct)\s*\(
+# MAGIC ```
+# MAGIC 
+# MAGIC The agent flags these for human review when nullable columns are used inside literal constructions.
+# MAGIC 
+# MAGIC ### 📋 When Do You Need to Act?
+# MAGIC 
+# MAGIC | Scenario | Action |
+# MAGIC |----------|--------|
+# MAGIC | Downstream code already handles nulls | ❌ No action -- new behavior is better |
+# MAGIC | Downstream `sum()`/`avg()` that assumed no nulls | ⚠️ Add `coalesce()` |
+# MAGIC | Schema comparisons in tests | ⚠️ Update expected results |
+# MAGIC | Data written to Delta tables with NOT NULL constraints | ⚠️ Add `coalesce()` |
+
+# COMMAND ----------
+
+# ============================================================================
+# BC-17.3-003: SPARK CONNECT - Null handling in literal constructions
+# ============================================================================
+
+from pyspark.sql.functions import array, struct, coalesce
+
+# ❌ PROBLEM: In Spark Connect, nulls in array/struct literals are now preserved
+# In Spark Classic this would coerce None → default (0 for int, "" for string)
+# In Spark Connect this preserves the null
+
+example_df = taxi_df.limit(5).select(
+    col("fare_amount"),
+    col("tip_amount"),
+    # This array may contain null if tip_amount is null
+    array(col("fare_amount"), col("tip_amount")).alias("amounts_array"),
+    # This struct may contain null fields
+    struct(col("fare_amount"), col("tip_amount")).alias("amounts_struct")
+)
+
+print("=== BC-17.3-003: Null Handling in Literals ===")
+print("If tip_amount is null, Spark Connect preserves the null in array/struct.")
+print("Spark Classic would coerce it to 0.")
+example_df.show(truncate=False)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### ✅ FIX: Explicit Null Handling with `coalesce()`
+# MAGIC 
+# MAGIC Only apply this fix if your downstream logic assumes nulls were already removed.
+# MAGIC 
+# MAGIC ```python
+# MAGIC from pyspark.sql.functions import array, struct, coalesce, lit
+# MAGIC 
+# MAGIC # AFTER: Explicitly handle nulls (only if you need to!)
+# MAGIC safe_array = array(
+# MAGIC     coalesce(col("fare_amount"), lit(0.0)),
+# MAGIC     coalesce(col("tip_amount"), lit(0.0))
+# MAGIC ).alias("amounts_array")
+# MAGIC 
+# MAGIC safe_struct = struct(
+# MAGIC     coalesce(col("fare_amount"), lit(0.0)).alias("fare"),
+# MAGIC     coalesce(col("tip_amount"), lit(0.0)).alias("tip")
+# MAGIC ).alias("amounts_struct")
+# MAGIC ```
+# MAGIC 
+# MAGIC > **Remember:** The new null-preserving behavior is often **more correct**. Only add `coalesce()` if your downstream code specifically needs the old behavior.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC 
+# MAGIC ## 🔧 BC-17.3-005: Spark Connect Decimal Precision [Assisted Fix]
+# MAGIC 
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC When you write `col("amount").cast("decimal")` without specifying precision and scale, Spark has to pick a default. In Spark Classic, this default varies. In Spark Connect, it always uses `SYSTEM_DEFAULT (38, 18)` -- which is a very wide decimal with 38 total digits and 18 after the decimal point.
+# MAGIC 
+# MAGIC **The important thing:** This change only affects **execution plans** (the logical blueprint Spark generates). It does **NOT** change your actual query results. However, if you have tests that compare plan outputs or if you rely on specific precision for downstream schema validation, you'll need to update.
+# MAGIC 
+# MAGIC ### 📖 What Changed
+# MAGIC 
+# MAGIC In **Spark Connect**, decimal precision for literals in `array()`, `map()`, and `struct()` defaults to `SYSTEM_DEFAULT (38, 18)` instead of the narrower inferred precision.
+# MAGIC 
+# MAGIC | Context | Spark Classic | Spark Connect |
+# MAGIC |---------|--------------|---------------|
+# MAGIC | `array(lit(1.5), lit(2.5))` | `DecimalType(2,1)` in plan | `DecimalType(38,18)` in plan |
+# MAGIC | Query result | `1.5, 2.5` | `1.5, 2.5` (same!) |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC 
+# MAGIC > **From [DBR 17.3 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/17.3lts.html):**
+# MAGIC >
+# MAGIC > *"Spark Connect uses SYSTEM_DEFAULT precision for decimal types in literal constructions. This affects only the logical plan representation, not the actual query results."*
+# MAGIC 
+# MAGIC - [Compare Spark Connect to Spark Classic](https://learn.microsoft.com/en-us/azure/databricks/spark/connect-vs-classic)
+# MAGIC 
+# MAGIC ### 🔍 How the Agent Detects It
+# MAGIC 
+# MAGIC **Detection Patterns:**
+# MAGIC ```
+# MAGIC DecimalType\s*\(
+# MAGIC \.cast\s*\(\s*["']decimal["']\s*\)
+# MAGIC ```
+# MAGIC 
+# MAGIC The risky pattern is bare `cast("decimal")` without explicit precision.
+# MAGIC 
+# MAGIC ### 📋 Quick Guide to Choosing Precision/Scale
+# MAGIC 
+# MAGIC | Use Case | Recommended | Example |
+# MAGIC |----------|-------------|---------|
+# MAGIC | Currency (USD/EUR) | `DecimalType(10, 2)` | `$12345678.90` |
+# MAGIC | Tax rates / percentages | `DecimalType(5, 4)` | `0.0825` |
+# MAGIC | Scientific measurements | `DecimalType(20, 10)` | `1234567890.1234567890` |
+# MAGIC | General-purpose / unsure | `DecimalType(38, 18)` | Maximum precision |
+
+# COMMAND ----------
+
+# ============================================================================
+# BC-17.3-005: SPARK CONNECT - Decimal precision in literal constructions
+# ============================================================================
+
+from pyspark.sql.types import DecimalType
+
+# ❌ RISKY PATTERN: Bare cast without explicit precision
+# In Spark Connect, this will use DecimalType(38, 18) instead of inferred precision
+risky_df = taxi_df.limit(5).select(
+    col("fare_amount"),
+    col("fare_amount").cast("decimal").alias("fare_bare_cast"),  # ← No precision specified!
+)
+
+# ✅ GOOD PATTERN: Explicit precision and scale
+safe_df = taxi_df.limit(5).select(
+    col("fare_amount"),
+    col("fare_amount").cast(DecimalType(10, 2)).alias("fare_explicit"),  # ← Explicit!
+)
+
+print("=== BC-17.3-005: Decimal Precision ===")
+print("Bare cast (risky -- plan changes in Spark Connect):")
+risky_df.printSchema()
+risky_df.show()
+print("\nExplicit precision (safe -- consistent on Classic and Connect):")
+safe_df.printSchema()
+safe_df.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### ✅ FIX: Always Specify Explicit Precision
+# MAGIC 
+# MAGIC ```python
+# MAGIC from pyspark.sql.types import DecimalType
+# MAGIC 
+# MAGIC # ❌ BEFORE: Bare cast (plan will differ in Spark Connect)
+# MAGIC df.withColumn("amount", col("amount").cast("decimal"))
+# MAGIC 
+# MAGIC # ✅ AFTER: Explicit precision and scale
+# MAGIC df.withColumn("amount", col("amount").cast(DecimalType(10, 2)))
+# MAGIC ```
+# MAGIC 
+# MAGIC > **Note:** This only affects execution plans, not query results. No action needed unless you have plan-comparison tests or strict schema validation.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC # 🔧 SECTION 3: ASSISTED FIX — CONFIGURATION CHANGES
+# MAGIC 
+# MAGIC These are **behavioral changes** where Spark configuration defaults changed. Code may run but produce different results.
+# MAGIC 
+# MAGIC The agent provides a **commented config line** as the fix snippet. **Test your code first** — only uncomment the config if results are wrong.
 # MAGIC 
 # MAGIC ---
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## BC-13.3-002: Parquet Timestamp NTZ
+# MAGIC ## 🔧 BC-13.3-002: Parquet Timestamp NTZ [Assisted Fix]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -924,7 +1238,7 @@ print('spark.conf.set("spark.sql.parquet.inferTimestampNTZ.enabled", "false")')
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-15.4-002: JDBC useNullCalendar
+# MAGIC ## 🔧 BC-15.4-002: JDBC useNullCalendar [Assisted Fix]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -963,7 +1277,76 @@ print('spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")')
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-16.4-004: MERGE materializeSource=none Disallowed
+# MAGIC ## 🔧 BC-15.4-005: JDBC Read Timestamp Handling [Assisted Fix]
+# MAGIC 
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC When Spark reads timestamps from a JDBC database (like Oracle, SQL Server, or PostgreSQL), it needs to know how to interpret the raw timestamp bytes. Before DBR 15.4, Spark used the **Gregorian calendar** to interpret these bytes. Starting in DBR 15.4, the default changed to a "**null calendar**" (proleptic Gregorian), which handles edge-case dates differently.
+# MAGIC 
+# MAGIC **Who is affected?** Only teams that read from external databases using JDBC (`.format("jdbc")` or `.jdbc()`). If you only read from Delta, Parquet, or CSV files, skip this.
+# MAGIC 
+# MAGIC **The risk:** Timestamps from JDBC may shift by hours or days for dates before October 15, 1582 (when the Gregorian calendar was adopted). For modern dates, the difference is usually zero, but you should verify.
+# MAGIC 
+# MAGIC ### 📖 What Changed
+# MAGIC 
+# MAGIC Default for `spark.sql.legacy.jdbc.useNullCalendar` changed to `true` in DBR 15.4.
+# MAGIC 
+# MAGIC | Setting | DBR < 15.4 | DBR 15.4+ |
+# MAGIC |---------|-----------|-----------|
+# MAGIC | `useNullCalendar` default | `false` (Gregorian) | `true` (null/proleptic) |
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC 
+# MAGIC > **From [DBR 15.4 LTS Release Notes](https://docs.databricks.com/en/release-notes/runtime/15.4lts.html):**
+# MAGIC >
+# MAGIC > *"The default value of `spark.sql.legacy.jdbc.useNullCalendar` has been changed to `true`. This may affect timestamp interpretation when reading from JDBC sources."*
+# MAGIC 
+# MAGIC - [JDBC Data Source Configuration](https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html)
+# MAGIC 
+# MAGIC ### 📋 3-Step Testing Process
+# MAGIC 
+# MAGIC | Step | Action | What to Check |
+# MAGIC |------|--------|---------------|
+# MAGIC | 1 | Run JDBC read on DBR 17.3 | Do timestamps match your source database? |
+# MAGIC | 2 | If wrong, add config | `spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")` |
+# MAGIC | 3 | Re-run and verify | Timestamps now match source |
+# MAGIC 
+# MAGIC > **Difference from BC-15.4-002:** BC-15.4-002 covers the general `useNullCalendar` config setting. BC-15.4-005 specifically covers JDBC read patterns (`.jdbc()` or `.format("jdbc")`) that may be affected by this config change.
+
+# COMMAND ----------
+
+# ============================================================================
+# BC-15.4-005: JDBC Read Timestamp Handling
+# ============================================================================
+
+print("=== BC-15.4-005: JDBC Read Timestamp Handling ===")
+print()
+
+jdbc_example = """
+# ❌ JDBC read that may have different timestamp behavior on DBR 15.4+
+df = (spark.read
+    .format("jdbc")
+    .option("url", "jdbc:postgresql://host:5432/database")
+    .option("dbtable", "transactions")
+    .option("user", "username")
+    .option("password", "password")
+    .load()
+)
+
+# ✅ FIX: If timestamps are wrong, add this BEFORE the JDBC read:
+# spark.conf.set("spark.sql.legacy.jdbc.useNullCalendar", "false")
+
+# Then re-run the JDBC read and verify timestamps match your source database.
+"""
+print(jdbc_example)
+print("Test first on DBR 17.3. Only add the config if timestamps differ from source.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC 
+# MAGIC ## 🔧 BC-16.4-004: MERGE materializeSource=none Disallowed [Assisted Fix]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -1000,7 +1383,7 @@ print('spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")'
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
-# MAGIC ## BC-17.3-002: Auto Loader Incremental Listing
+# MAGIC ## 🔧 BC-17.3-002: Auto Loader Incremental Listing [Assisted Fix]
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
@@ -1393,35 +1776,40 @@ print(scala_example_2)
 # MAGIC | BC-16.4-001g | `.view.force` | `.view.to(List)` | .scala |
 # MAGIC | BC-16.4-001i | `'symbol` literal | `Symbol("symbol")` | .scala |
 # MAGIC 
-# MAGIC ### 🟡 Manual Review (12 patterns)
+# MAGIC ### 🔧 Assisted Fix (11 patterns)
+# MAGIC 
+# MAGIC Agent provides exact fix snippet in scan output. Developer reviews and decides.
+# MAGIC 
+# MAGIC | ID | Pattern | Suggested Fix |
+# MAGIC |----|---------|---------------|
+# MAGIC | BC-SC-002 | Temp view name reuse | UUID-suffixed view names |
+# MAGIC | BC-SC-003 | UDF captures external variable | Factory wrapper pattern |
+# MAGIC | BC-SC-004 | `df.columns` in loop | Cache outside loop |
+# MAGIC | BC-17.3-005 | `DecimalType` without precision | Explicit `DecimalType(p, s)` |
+# MAGIC | BC-13.3-002 | Parquet timestamp NTZ | Commented `inferTimestampNTZ` config |
+# MAGIC | BC-15.4-002 | JDBC useNullCalendar | Commented `useNullCalendar` config |
+# MAGIC | BC-15.4-005 | JDBC read patterns | Commented `useNullCalendar` config |
+# MAGIC | BC-16.4-003 | Cached data source reads | Commented cache config |
+# MAGIC | BC-16.4-004 | `materializeSource=none` | Replace with `"auto"` |
+# MAGIC | BC-16.4-006 | Auto Loader `cleanSource` | Commented config with test guidance |
+# MAGIC | BC-17.3-002 | Auto Loader incremental listing | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC 
+# MAGIC ### 🟡 Manual Review (10 patterns)
+# MAGIC 
+# MAGIC Human judgment required. No fix snippet generated.
 # MAGIC 
 # MAGIC | ID | Pattern | Decision |
 # MAGIC |----|---------|----------|
 # MAGIC | BC-13.3-001 | `MERGE INTO` | Review type casting for overflow |
 # MAGIC | BC-13.3-003 | `overwriteSchema` + dynamic partition | Separate operations |
+# MAGIC | BC-13.3-004 | MERGE/UPDATE type mismatch | Review ANSI store assignment policy |
 # MAGIC | BC-15.4-001 | `VariantType()` in UDF | Use StringType + JSON |
 # MAGIC | BC-15.4-004 | `CREATE VIEW (col TYPE)` | Remove types, cast in SELECT |
 # MAGIC | BC-15.4-006 | `CREATE VIEW` | Review schema binding changes |
 # MAGIC | BC-16.4-002 | `HashMap`/`HashSet` | Don't rely on iteration order |
 # MAGIC | BC-16.4-001h | `collection.Seq` | Use explicit immutable/mutable |
 # MAGIC | BC-SC-001 | try/except around transforms | Add `df.columns` for validation |
-# MAGIC | BC-SC-003 | UDF captures external variable | Use function factory |
-# MAGIC | BC-SC-004 | `df.columns` in loop | Cache outside loop |
-# MAGIC | BC-17.3-003 | `array`/`map`/`struct` literals | Handle nulls explicitly |
-# MAGIC | BC-17.3-005 | `DecimalType` | Specify precision/scale |
-# MAGIC 
-# MAGIC ### ⚙️ Config Settings (8 patterns)
-# MAGIC 
-# MAGIC | ID | Test First | Config If Needed |
-# MAGIC |----|------------|------------------|
-# MAGIC | BC-13.3-002 | Check Parquet timestamps | `spark.sql.parquet.inferTimestampNTZ.enabled` = `false` |
-# MAGIC | BC-13.3-004 | Check MERGE/UPDATE errors | `spark.sql.storeAssignmentPolicy` |
-# MAGIC | BC-15.4-002 | Check JDBC timestamps | `spark.sql.legacy.jdbc.useNullCalendar` = `false` |
-# MAGIC | BC-16.4-003 | Check cached data source reads | `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` |
-# MAGIC | BC-16.4-004 | Check for `"none"` setting | Remove or change to `"auto"` |
-# MAGIC | BC-16.4-006 | Check Auto Loader cleanup | `cloudFiles.cleanSource` setting |
-# MAGIC | BC-17.3-002 | Check Auto Loader speed | `cloudFiles.useIncrementalListing` = `"auto"` |
-# MAGIC | BC-15.4-005 | Check JDBC reads | Test timestamp handling |
+# MAGIC | BC-17.3-003 | `array`/`map`/`struct` literals | Review null preservation behavior |
 
 # COMMAND ----------
 
@@ -1441,10 +1829,10 @@ print(scala_example_2)
 # MAGIC 
 # MAGIC ### Step 2: Review the Findings
 # MAGIC 
-# MAGIC Assistant will categorize findings:
-# MAGIC - 🔴 **HIGH** - Will fail immediately, can be auto-fixed
-# MAGIC - 🟡 **MEDIUM** - May cause issues, needs review
-# MAGIC - ⚙️ **CONFIG** - Behavioral change, test first
+# MAGIC Assistant will categorize findings into three tiers:
+# MAGIC - 🔴 **Auto-Fix** - Safe to apply automatically, no review needed
+# MAGIC - 🔧 **Assisted Fix** - Suggested fix snippet provided, developer reviews and decides
+# MAGIC - 🟡 **Manual Review** - Human judgment required, no fix snippet
 # MAGIC 
 # MAGIC ### Step 3: Apply Auto-Fixes
 # MAGIC 
@@ -1452,15 +1840,24 @@ print(scala_example_2)
 # MAGIC Fix all the auto-fixable breaking changes in this notebook
 # MAGIC ```
 # MAGIC 
-# MAGIC ### Step 4: Review Manual Items
+# MAGIC ### Step 4: Review Assisted Fix Suggestions
 # MAGIC 
-# MAGIC For each manual review item, ask:
+# MAGIC For each assisted fix item, the agent provides a copy-paste-ready code snippet.
+# MAGIC Review the suggestions and apply as appropriate:
 # MAGIC 
 # MAGIC ```
-# MAGIC Help me fix [BC-SC-002] - the temp view name reuse in the process_batch function
+# MAGIC Show me the assisted fix for BC-SC-002 - the temp view name reuse
 # MAGIC ```
 # MAGIC 
-# MAGIC ### Step 5: Validate
+# MAGIC ### Step 5: Review Manual Items
+# MAGIC 
+# MAGIC For manual review items, ask for guidance:
+# MAGIC 
+# MAGIC ```
+# MAGIC Help me understand BC-17.3-003 - the null handling in my array constructions
+# MAGIC ```
+# MAGIC 
+# MAGIC ### Step 6: Validate
 # MAGIC 
 # MAGIC ```
 # MAGIC Validate that all breaking changes have been addressed
@@ -1495,4 +1892,4 @@ print("Cleanup complete!")
 # MAGIC 
 # MAGIC ---
 # MAGIC 
-# MAGIC *Last Updated: January 2026*
+# MAGIC *Last Updated: February 2026*

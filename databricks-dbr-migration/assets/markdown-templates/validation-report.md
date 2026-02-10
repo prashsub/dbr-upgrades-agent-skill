@@ -10,10 +10,15 @@
 # MAGIC | ✅ Validated (No Issues) | {VALIDATED_COUNT} |
 # MAGIC | ⚠️ Issues Found | {ISSUES_COUNT} |
 # MAGIC 
-# MAGIC ### ✅ Validated Fixes
+# MAGIC ### ✅ Auto-Fix Validation
 # MAGIC | BC-ID | Pattern | Status |
 # MAGIC |-------|---------|--------|
 # MAGIC {VALIDATED_ITEMS}
+# MAGIC 
+# MAGIC ### 🔧 Assisted Fix Validation
+# MAGIC | BC-ID | Pattern Checked | Status | Detail |
+# MAGIC |-------|----------------|--------|--------|
+# MAGIC {ASSISTED_FIX_VALIDATION}
 # MAGIC 
 # MAGIC ### ⚠️ Issues Found
 # MAGIC | Line | BC-ID | Issue | Recommendation |

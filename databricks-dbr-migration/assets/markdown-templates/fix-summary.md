@@ -8,26 +8,30 @@
 # MAGIC | Status | Count |
 # MAGIC |--------|-------|
 # MAGIC | ✅ Fixed | {FIXED_COUNT} |
-# MAGIC | 🟡 Manual Review Still Required | {MANUAL_REVIEW_COUNT} |
-# MAGIC | ⚙️ Config Check Still Required | {CONFIG_CHECK_COUNT} |
+# MAGIC | 🔧 Assisted Fix (suggested) | {ASSISTED_FIX_COUNT} |
+# MAGIC | 🟡 Manual Review (unchanged) | {MANUAL_REVIEW_COUNT} |
 # MAGIC 
 # MAGIC ### ✅ Auto-Fixes Applied
 # MAGIC | Line | BC-ID | Pattern | Applied Fix |
 # MAGIC |------|-------|---------|-------------|
 # MAGIC {APPLIED_FIXES}
 # MAGIC 
+# MAGIC ### 🔧 Assisted Fix Status
+# MAGIC | Line | BC-ID | Issue | Status | Suggested Fix |
+# MAGIC |------|-------|-------|--------|---------------|
+# MAGIC {ASSISTED_FIX_ITEMS}
+# MAGIC 
+# MAGIC ### 🔧 Suggested Fix Snippets (copy-paste ready)
+# MAGIC 
+# MAGIC {ASSISTED_FIX_SNIPPETS}
+# MAGIC 
 # MAGIC ### 🟡 Manual Review Still Required
 # MAGIC | Line | BC-ID | Issue | Action |
 # MAGIC |------|-------|-------|--------|
 # MAGIC {MANUAL_REVIEW_ITEMS}
 # MAGIC 
-# MAGIC ### ⚙️ Config Check Still Required
-# MAGIC | Line | BC-ID | Issue | Config If Needed |
-# MAGIC |------|-------|-------|------------------|
-# MAGIC {CONFIG_CHECK_ITEMS}
-# MAGIC 
 # MAGIC ### Next Steps
-# MAGIC 1. Review manual items above
-# MAGIC 2. Test on DBR {TARGET_VERSION} cluster
-# MAGIC 3. Validate config changes as needed
+# MAGIC 1. Review and apply assisted fix suggestions above
+# MAGIC 2. Address manual review items
+# MAGIC 3. Test on DBR {TARGET_VERSION} cluster
 # MAGIC 4. Run: `@databricks-dbr-migration validate all fixes were applied correctly`

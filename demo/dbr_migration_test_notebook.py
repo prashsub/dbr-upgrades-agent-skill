@@ -9,8 +9,8 @@
 # MAGIC | Category | Examples | IDs Included |
 # MAGIC |----------|----------|--------------|
 # MAGIC | 🔴 Auto-Fix | 10 | BC-17.3-001, BC-15.4-003, BC-16.4-001a-i |
-# MAGIC | 🟡 Manual Review | 9 | BC-13.3-001/003, BC-15.4-001/004, BC-SC-001/002/003/004 |
-# MAGIC | ⚙️ Config | 4 | BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-17.3-002 |
+# MAGIC | 🟠 Assisted Fix | 6 | BC-SC-002/003, BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-17.3-002 |
+# MAGIC | 🟡 Manual Review | 7 | BC-13.3-001/003, BC-15.4-001/004, BC-SC-001/004 |
 # MAGIC 
 # MAGIC ## Usage
 # MAGIC 
@@ -538,13 +538,13 @@ print(auto_loader_code)
 # MAGIC | BC-16.4-002 | 🟡 Manual | HashMap/HashSet | **FLAG** - Don't rely on order |
 # MAGIC | BC-16.4-001h | 🟡 Manual | `collection.Seq` | **FLAG** - Use explicit type |
 # MAGIC | BC-SC-001 | 🟡 Manual | Lazy schema analysis | **FLAG** - Add `df.columns` for validation |
-# MAGIC | BC-SC-002 | 🟡 Manual | Temp view name reuse | **FLAG** - Add UUID to view names |
-# MAGIC | BC-SC-003 | 🟡 Manual | UDF late binding | **FLAG** - Use function factory pattern |
+# MAGIC | BC-SC-002 | 🟠 Assisted | Temp view name reuse | **SNIPPET** - UUID-suffixed view names |
+# MAGIC | BC-SC-003 | 🟠 Assisted | UDF late binding | **SNIPPET** - Factory wrapper pattern |
 # MAGIC | BC-SC-004 | 🟡 Manual | Schema in loop | **FLAG** - Cache columns outside loop |
-# MAGIC | BC-13.3-002 | ⚙️ Config | Parquet timestamp | **FLAG** - Test timestamps first |
-# MAGIC | BC-15.4-002 | ⚙️ Config | JDBC timestamp | **FLAG** - Test JDBC reads first |
-# MAGIC | BC-16.4-004 | ⚙️ Config | MERGE source=none | **FLAG** - Remove or use "auto" |
-# MAGIC | BC-17.3-002 | ⚙️ Config | Auto Loader listing | **FLAG** - Test performance first |
+# MAGIC | BC-13.3-002 | 🟠 Assisted | Parquet timestamp | **SNIPPET** - Commented config provided |
+# MAGIC | BC-15.4-002 | 🟠 Assisted | JDBC timestamp | **SNIPPET** - Commented config provided |
+# MAGIC | BC-16.4-004 | 🟠 Assisted | MERGE source=none | **SNIPPET** - Remove or use "auto" |
+# MAGIC | BC-17.3-002 | 🟠 Assisted | Auto Loader listing | **SNIPPET** - Commented config provided |
 
 # COMMAND ----------
 

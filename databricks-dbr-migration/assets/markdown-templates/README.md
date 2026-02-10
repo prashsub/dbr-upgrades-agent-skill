@@ -10,11 +10,12 @@ This directory contains reusable markdown templates that agents use to generate 
 - `{SCAN_DATE}` - Date/time of scan (YYYY-MM-DD HH:MM)
 - `{TARGET_VERSION}` - Target DBR version (e.g., "17.3")
 - `{AUTO_FIX_COUNT}` - Number of auto-fixable issues found
+- `{ASSISTED_FIX_COUNT}` - Number of assisted fix items (snippet provided)
 - `{MANUAL_REVIEW_COUNT}` - Number of issues requiring manual review
-- `{CONFIG_CHECK_COUNT}` - Number of config items to test
 - `{AUTO_FIX_ITEMS}` - Table rows for auto-fixable items
+- `{ASSISTED_FIX_ITEMS}` - Table rows for assisted fix items
+- `{ASSISTED_FIX_SNIPPETS}` - Code fix snippets for assisted fix items
 - `{MANUAL_REVIEW_ITEMS}` - Table rows for manual review items
-- `{CONFIG_CHECK_ITEMS}` - Table rows for config check items
 
 **Example row format:**
 ```
@@ -27,11 +28,11 @@ This directory contains reusable markdown templates that agents use to generate 
 - `{FIX_DATE}` - Date/time of fix (YYYY-MM-DD HH:MM)
 - `{TARGET_VERSION}` - Target DBR version (e.g., "17.3")
 - `{FIXED_COUNT}` - Number of issues fixed
+- `{ASSISTED_FIX_COUNT}` - Number of assisted fix items still pending
 - `{MANUAL_REVIEW_COUNT}` - Number of issues still requiring manual review
-- `{CONFIG_CHECK_COUNT}` - Number of config items still to test
 - `{APPLIED_FIXES}` - Table rows for applied fixes
+- `{ASSISTED_FIX_ITEMS}` - Table rows for assisted fix items pending
 - `{MANUAL_REVIEW_ITEMS}` - Table rows for remaining manual review items
-- `{CONFIG_CHECK_ITEMS}` - Table rows for remaining config check items
 
 **Example row format:**
 ```

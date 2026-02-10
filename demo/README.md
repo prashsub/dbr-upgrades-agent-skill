@@ -52,25 +52,25 @@ Contains intentional breaking patterns that the Agent Skill can:
 | BC-16.4-001d | `Traversable` | `Iterable` |
 | BC-16.4-001e | `Stream.from()` | `LazyList.from()` |
 
-### 🟡 Manual Review (6 patterns)
+### 🟠 Assisted Fix (6 patterns)
+
+| ID | Pattern | Snippet Provided |
+|----|---------|------------------|
+| BC-SC-002 | Temp view name reuse | UUID-suffixed view names |
+| BC-SC-003 | UDF late binding | Factory wrapper pattern |
+| BC-13.3-002 | `parquet.inferTimestampNTZ` | Commented config line |
+| BC-15.4-002 | `jdbc.useNullCalendar` | Commented config line |
+| BC-16.4-004 | `merge.materializeSource` | Remove or use "auto" |
+| BC-17.3-002 | `cloudFiles.useIncrementalListing` | Commented config line |
+
+### 🟡 Manual Review (4 patterns)
 
 | ID | Pattern | Decision Needed |
 |----|---------|-----------------|
 | BC-15.4-001 | `VariantType()` in UDF | Skip if 16.4+ |
 | BC-15.4-004 | `CREATE VIEW (col TYPE)` | Remove types |
 | BC-SC-001 | Lazy schema analysis | Add validation |
-| BC-SC-002 | Temp view name reuse | Add UUID |
-| BC-SC-003 | UDF late binding | Function factory |
 | BC-SC-004 | Schema access in loops | Cache outside |
-
-### ⚙️ Config Settings (4 patterns)
-
-| ID | Setting | When to Add |
-|----|---------|-------------|
-| BC-13.3-002 | `parquet.inferTimestampNTZ` | Timestamps wrong |
-| BC-15.4-002 | `jdbc.useNullCalendar` | JDBC timestamps wrong |
-| BC-16.4-004 | `merge.materializeSource` | Using `"none"` |
-| BC-17.3-002 | `cloudFiles.useIncrementalListing` | Slow Auto Loader |
 
 ## How to Use
 
