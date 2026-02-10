@@ -2,7 +2,7 @@
 name: databricks-dbr-migration
 description: Find, fix, and validate breaking changes when upgrading Databricks Runtime between LTS versions (13.3 to 17.3). Use this skill when users ask to scan code for DBR compatibility issues, automatically fix breaking changes, validate migrations, or upgrade Databricks workflows. Covers Spark 3.4 to 4.0, Scala 2.12 to 2.13, Delta Lake, Auto Loader, Python UDFs, and SQL syntax.
 license: Apache-2.0
-compatibility: Requires file system access. Works with Databricks notebooks, Python, SQL, and Scala files.
+compatibility: Requires file system access. Works with Databricks notebooks (.py and .ipynb), Python, SQL, and Scala files.
 metadata:
   databricks-skill-author: Databricks Solution Architect
   databricks-skill-version: "5.0.0"
@@ -347,6 +347,9 @@ Find all relevant files in the specified path **including subdirectories**:
 # Find Python files (recursively scans all subdirectories)
 find /path/to/scan -name "*.py" -type f
 
+# Find Jupyter/Databricks notebook files (.ipynb)
+find /path/to/scan -name "*.ipynb" -type f
+
 # Find SQL files
 find /path/to/scan -name "*.sql" -type f
 
@@ -354,9 +357,15 @@ find /path/to/scan -name "*.sql" -type f
 find /path/to/scan -name "*.scala" -type f
 ```
 
+**Important: `.ipynb` (Jupyter Notebook) File Handling:**
+- `.ipynb` files are JSON-structured — code lives inside `"source"` arrays within cell objects
+- `grep` will still match patterns inside `.ipynb` files, but line numbers refer to the JSON file lines, not notebook cell lines
+- When fixing `.ipynb` files, parse the JSON structure and modify the appropriate cell's `"source"` array
+- Databricks notebooks may be exported as either `.py` (with `# MAGIC` prefixes) or `.ipynb` format — scan for **both**
+
 **Important for Multi-File Projects:**
 - The `find` command recursively searches all subdirectories (e.g., `utils/`, `src/`, etc.)
-- Scan ALL Python files found, including helper modules and utility packages
+- Scan ALL Python and notebook files found, including helper modules and utility packages
 - Check `import` and `from` statements to identify dependencies
 - If a notebook imports from local modules (e.g., `from utils.helpers import foo`), scan those imported files too
 - Look for package structures with `__init__.py` files
@@ -364,7 +373,8 @@ find /path/to/scan -name "*.scala" -type f
 **Example Multi-File Structure:**
 ```
 project/
-├── main_notebook.py          ← Scan this
+├── main_notebook.py          ← Scan this (.py notebook format)
+├── main_notebook.ipynb       ← Scan this (.ipynb notebook format)
 ├── utils/
 │   ├── __init__.py           ← Scan this
 │   └── dbr_helpers.py        ← Scan this (imported by main_notebook)
@@ -380,32 +390,32 @@ Search for each pattern and report findings:
 
 **BC-17.3-001: input_file_name() [REMOVED in 17.3]**
 ```bash
-grep -rn "input_file_name\s*(" --include="*.py" --include="*.sql" --include="*.scala" /path/to/scan
+grep -rn "input_file_name\s*(" --include="*.py" --include="*.ipynb" --include="*.sql" --include="*.scala" /path/to/scan
 ```
 
 **BC-15.4-001: VARIANT in Python UDF [REVIEW REQUIRED]**
 ```bash
-grep -rn "VariantType" --include="*.py" /path/to/scan
+grep -rn "VariantType" --include="*.py" --include="*.ipynb" /path/to/scan
 ```
 > ⚠️ **FLAG for review** - Test on target DBR or use StringType + JSON serialization as safer alternative.
 
 **BC-16.4-001: Scala JavaConverters [DEPRECATED in 16.4]**
 ```bash
-grep -rn "scala.collection.JavaConverters" --include="*.scala" /path/to/scan
+grep -rn "scala.collection.JavaConverters" --include="*.scala" --include="*.ipynb" /path/to/scan
 ```
 
 #### MEDIUM SEVERITY PATTERNS
 
 **BC-15.4-003: '!' syntax for NOT [DISALLOWED in 15.4]**
 ```bash
-grep -rn "IF\s*!" --include="*.sql" /path/to/scan
-grep -rn "IS\s*!" --include="*.sql" /path/to/scan
-grep -rn "\s!\s*IN\b" --include="*.sql" /path/to/scan
+grep -rn "IF\s*!" --include="*.sql" --include="*.ipynb" /path/to/scan
+grep -rn "IS\s*!" --include="*.sql" --include="*.ipynb" /path/to/scan
+grep -rn "\s!\s*IN\b" --include="*.sql" --include="*.ipynb" /path/to/scan
 ```
 
 **BC-16.4-001b: Scala .to[Collection] syntax [CHANGED in 16.4]**
 ```bash
-grep -rn "\.to\[" --include="*.scala" /path/to/scan
+grep -rn "\.to\[" --include="*.scala" --include="*.ipynb" /path/to/scan
 ```
 
 ### Step 3: Search for MANUAL REVIEW Patterns
@@ -413,52 +423,52 @@ grep -rn "\.to\[" --include="*.scala" /path/to/scan
 **BC-15.4-001: VARIANT in UDF [REVIEW REQUIRED]**
 > ⚠️ **Always flag for review.** Test on target DBR or use StringType + JSON as safer alternative.
 ```bash
-grep -rn "VariantType\s*(" --include="*.py" /path/to/scan
+grep -rn "VariantType\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
 ```
 
 **BC-15.4-004: VIEW Column Type Definition**
 ```bash
-grep -rn "CREATE.*VIEW.*\(.*\(INT\|STRING\|BIGINT\|DOUBLE\|NOT NULL\|DEFAULT\)" --include="*.sql" /path/to/scan
+grep -rn "CREATE.*VIEW.*\(.*\(INT\|STRING\|BIGINT\|DOUBLE\|NOT NULL\|DEFAULT\)" --include="*.sql" --include="*.ipynb" /path/to/scan
 ```
 
 ### Step 4: Search for ASSISTED FIX Patterns
 
 **BC-SC-002: Temp View Name Reuse**
 ```bash
-grep -rn "createOrReplaceTempView\|createTempView" --include="*.py" --include="*.scala" /path/to/scan
+grep -rn "createOrReplaceTempView\|createTempView" --include="*.py" --include="*.ipynb" --include="*.scala" /path/to/scan
 # Then check if same name appears multiple times in same file
 ```
 
 **BC-SC-003: UDF with External Variables**
 ```bash
-grep -rn "@udf" --include="*.py" /path/to/scan
+grep -rn "@udf" --include="*.py" --include="*.ipynb" /path/to/scan
 # Then check if function body references variables defined outside
 ```
 
 **BC-SC-004: Schema Access in Loops**
 ```bash
-grep -rn "\.columns\|\.schema\|\.dtypes" --include="*.py" /path/to/scan
+grep -rn "\.columns\|\.schema\|\.dtypes" --include="*.py" --include="*.ipynb" /path/to/scan
 # Then check if inside for/while loop
 ```
 
 **BC-13.3-002: Parquet Timestamp**
 ```bash
-grep -rn "\.parquet\|read.parquet" --include="*.py" /path/to/scan
+grep -rn "\.parquet\|read.parquet" --include="*.py" --include="*.ipynb" /path/to/scan
 ```
 
 **BC-15.4-002: JDBC**
 ```bash
-grep -rn "\.jdbc\|read.jdbc" --include="*.py" /path/to/scan
+grep -rn "\.jdbc\|read.jdbc" --include="*.py" --include="*.ipynb" /path/to/scan
 ```
 
 **BC-16.4-004: MERGE materializeSource=none**
 ```bash
-grep -rn "materializeSource.*none" --include="*.py" --include="*.sql" /path/to/scan
+grep -rn "materializeSource.*none" --include="*.py" --include="*.ipynb" --include="*.sql" /path/to/scan
 ```
 
 **BC-17.3-002: Auto Loader**
 ```bash
-grep -rn "cloudFiles" --include="*.py" /path/to/scan
+grep -rn "cloudFiles" --include="*.py" --include="*.ipynb" /path/to/scan
 ```
 
 ### Step 5: Report Findings with THREE TIERS
@@ -530,15 +540,95 @@ Format findings as:
 
 ### Step 6: Add Scan Summary as Markdown Cell
 
-**ALWAYS add the scan results as a new markdown cell at the end of the notebook:**
+**ALWAYS add the scan results as a new markdown cell at the end of the notebook.**
 
-- Add a new cell with `# MAGIC %md` prefix
-- Include scan date and target DBR version
-- Include summary table with counts by category
-- Include detailed findings tables
-- Include next steps for the developer
+Load `assets/markdown-templates/scan-summary.md` and populate EVERY variable. Here is how to fill each one:
 
-**Example:** See the markdown cell format in the "CRITICAL: Add Summary as Markdown Cell" section above.
+| Variable | How to Populate |
+|----------|----------------|
+| `{SCAN_DATE}` | Current date/time: `YYYY-MM-DD HH:MM` |
+| `{TARGET_VERSION}` | Target DBR version (e.g., `17.3`) |
+| `{AUTO_FIX_COUNT}` | Count of auto-fix findings |
+| `{ASSISTED_FIX_COUNT}` | Count of assisted fix findings |
+| `{MANUAL_REVIEW_COUNT}` | Count of manual review findings |
+| `{AUTO_FIX_ITEMS}` | One table row per auto-fix finding: `\| line \| BC-ID \| pattern \| fix \|` |
+| `{ASSISTED_FIX_ITEMS}` | One table row per assisted fix finding: `\| line \| BC-ID \| issue \| suggested fix \|` |
+| `{MANUAL_REVIEW_ITEMS}` | One table row per manual review finding: `\| line \| BC-ID \| issue \| action \|` |
+| **`{ASSISTED_FIX_SNIPPETS}`** | **⬇️ SEE BELOW — this is the most important one** |
+
+#### How to fill `{ASSISTED_FIX_SNIPPETS}` (REQUIRED — do not leave blank)
+
+For EACH assisted fix finding, you MUST generate a code block with the actual fix. Follow these steps:
+
+1. **Go back to the code** you already scanned. Re-read 5-10 lines around each assisted fix finding.
+2. **For each finding**, generate a block with this structure:
+
+```
+# MAGIC #### 🔧 {BC-ID}: {what was found, using actual names}
+# MAGIC
+# MAGIC **Original (line {N}):**
+# MAGIC ```python
+# MAGIC {paste the actual original line(s) from the code}
+# MAGIC ```
+# MAGIC
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC {the actual fixed code using real variable names, function names, view names}
+# MAGIC ```
+# MAGIC ⚠️ {what the developer should verify}
+```
+
+3. **Repeat** for every assisted fix finding. Concatenate all blocks into `{ASSISTED_FIX_SNIPPETS}`.
+
+**Example — if the scan found `df_batch1.createOrReplaceTempView("batch")` on line 114 and `df_batch2.createOrReplaceTempView("batch")` on line 119:**
+
+```
+# MAGIC #### 🔧 BC-SC-002: Temp view `"batch"` reused (lines 114, 119)
+# MAGIC
+# MAGIC **Original (line 114):** `df_batch1.createOrReplaceTempView("batch")`
+# MAGIC **Original (line 119):** `df_batch2.createOrReplaceTempView("batch")`
+# MAGIC
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC import uuid
+# MAGIC
+# MAGIC # Line 114:
+# MAGIC batch_view_1 = f"batch_{uuid.uuid4().hex[:8]}"
+# MAGIC df_batch1.createOrReplaceTempView(batch_view_1)
+# MAGIC
+# MAGIC # Line 119:
+# MAGIC batch_view_2 = f"batch_{uuid.uuid4().hex[:8]}"
+# MAGIC df_batch2.createOrReplaceTempView(batch_view_2)
+# MAGIC ```
+# MAGIC ⚠️ Also update `spark.table("batch")` and `spark.sql("SELECT ... FROM batch")` to use the new names.
+```
+
+**If you found a UDF `apply_multiplier` capturing `multiplier` at lines 141-143:**
+
+```
+# MAGIC #### 🔧 BC-SC-003: UDF `apply_multiplier` captures external variable `multiplier`
+# MAGIC
+# MAGIC **Original (lines 141-143):**
+# MAGIC ```python
+# MAGIC @udf("double")
+# MAGIC def apply_multiplier(value):
+# MAGIC     return value * multiplier
+# MAGIC ```
+# MAGIC
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC def make_apply_multiplier_udf(multiplier):
+# MAGIC     @udf("double")
+# MAGIC     def apply_multiplier(value):
+# MAGIC         return value * multiplier
+# MAGIC     return apply_multiplier
+# MAGIC
+# MAGIC apply_multiplier = make_apply_multiplier_udf(multiplier)
+# MAGIC ```
+# MAGIC ⚠️ Confirm `multiplier` should be locked at 1.0 (definition time), not 2.5 (execution time).
+```
+
+**DO NOT skip this step. DO NOT leave `{ASSISTED_FIX_SNIPPETS}` blank. The whole point of "Assisted Fix" is providing the actual fix code.**
 
 ---
 
@@ -548,7 +638,11 @@ When user asks to fix breaking changes, apply these transformations.
 
 ### CRITICAL: Add Fix Summary as Markdown Cell
 
-**After applying fixes, ALWAYS add a summary as a NEW MARKDOWN CELL at the end of the notebook:**
+**After applying fixes, ALWAYS add a summary as a NEW MARKDOWN CELL at the end of the notebook.**
+
+**Use the template from `assets/markdown-templates/fix-summary.md` and replace all variables.**
+
+**IMPORTANT: The `{ASSISTED_FIX_SNIPPETS}` variable MUST be populated with actual code blocks — follow the same process as Step 6 in the SCAN capability. Go back to each assisted fix finding, read the actual code, and generate copy-paste-ready fix snippets. DO NOT leave this blank.**
 
 ### For FIX Results - Add This Markdown Cell:
 
@@ -583,8 +677,31 @@ When user asks to fix breaking changes, apply these transformations.
 # MAGIC ### 🔧 Assisted Fix (Suggested Fixes Provided)
 # MAGIC | Line | BC-ID | Issue | Suggested Fix |
 # MAGIC |------|-------|-------|---------------|
-# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | UUID-suffixed view names (see snippet) |
-# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC | 55,85 | BC-SC-002 | Temp view reuse | UUID-suffixed view names (see snippet below) |
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` (see snippet below) |
+# MAGIC 
+# MAGIC ### 🔧 Suggested Fix Snippets (copy-paste ready)
+# MAGIC 
+# MAGIC #### 🔧 BC-SC-002-DUP: Temp view `"batch"` reused (lines 55, 85)
+# MAGIC **Original (line 55):** `df_batch1.createOrReplaceTempView("batch")`
+# MAGIC **Original (line 85):** `df_batch2.createOrReplaceTempView("batch")`
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC import uuid
+# MAGIC batch_view_1 = f"batch_{uuid.uuid4().hex[:8]}"
+# MAGIC df_batch1.createOrReplaceTempView(batch_view_1)
+# MAGIC batch_view_2 = f"batch_{uuid.uuid4().hex[:8]}"
+# MAGIC df_batch2.createOrReplaceTempView(batch_view_2)
+# MAGIC ```
+# MAGIC ⚠️ Also update downstream `spark.table("batch")` and SQL references.
+# MAGIC 
+# MAGIC #### 🔧 BC-17.3-002: Auto Loader incremental listing (line 30)
+# MAGIC **Original:** `spark.readStream.format("cloudFiles").load(path)`
+# MAGIC **Replacement:**
+# MAGIC ```python
+# MAGIC spark.readStream.format("cloudFiles").option("cloudFiles.useIncrementalListing", "auto").load(path)
+# MAGIC ```
+# MAGIC ℹ️ Explicitly sets listing behavior. Test with your data volume.
 # MAGIC 
 # MAGIC ### 🟡 Manual Review Still Required
 # MAGIC | Line | BC-ID | Issue | Action Needed |
@@ -593,9 +710,10 @@ When user asks to fix breaking changes, apply these transformations.
 # MAGIC 
 # MAGIC ### Next Steps
 # MAGIC 1. Review the changes above
-# MAGIC 2. Address manual review items
-# MAGIC 3. Test on DBR 17.3
-# MAGIC 4. Run: `@databricks-dbr-migration validate all fixes`
+# MAGIC 2. **Review and apply the assisted fix snippets above**
+# MAGIC 3. Address manual review items
+# MAGIC 4. Test on DBR 17.3
+# MAGIC 5. Run: `@databricks-dbr-migration validate all fixes`
 ````
 
 ### Multi-File Fix Strategy
@@ -747,10 +865,10 @@ After applying fixes, validate they are correct:
 **Verify no breaking patterns remain:**
 ```bash
 # Should return no results after fixes
-grep -rn "input_file_name\s*(" --include="*.py" --include="*.sql" --include="*.scala" /path/to/scan
-grep -rn "(IF|IS)\s*!" --include="*.sql" /path/to/scan
-grep -rn "VariantType" --include="*.py" /path/to/scan
-grep -rn "scala.collection.JavaConverters" --include="*.scala" /path/to/scan
+grep -rn "input_file_name\s*(" --include="*.py" --include="*.ipynb" --include="*.sql" --include="*.scala" /path/to/scan
+grep -rn "(IF|IS)\s*!" --include="*.sql" --include="*.ipynb" /path/to/scan
+grep -rn "VariantType" --include="*.py" --include="*.ipynb" /path/to/scan
+grep -rn "scala.collection.JavaConverters" --include="*.scala" --include="*.ipynb" /path/to/scan
 ```
 
 ### Step 2: Replacement Validation
@@ -758,21 +876,22 @@ grep -rn "scala.collection.JavaConverters" --include="*.scala" /path/to/scan
 **Verify correct replacements exist:**
 ```bash
 # Should find _metadata.file_name replacements
-grep -rn "_metadata.file_name" --include="*.py" --include="*.sql" --include="*.scala" /path/to/scan
+grep -rn "_metadata.file_name" --include="*.py" --include="*.ipynb" --include="*.sql" --include="*.scala" /path/to/scan
 
 # Should find NOT instead of !
-grep -rn "IF NOT EXISTS\|IS NOT NULL\|NOT IN\|NOT BETWEEN\|NOT LIKE" --include="*.sql" /path/to/scan
+grep -rn "IF NOT EXISTS\|IS NOT NULL\|NOT IN\|NOT BETWEEN\|NOT LIKE" --include="*.sql" --include="*.ipynb" /path/to/scan
 
 # Should find new Scala imports
-grep -rn "scala.jdk.CollectionConverters" --include="*.scala" /path/to/scan
+grep -rn "scala.jdk.CollectionConverters" --include="*.scala" --include="*.ipynb" /path/to/scan
 ```
 
 ### Step 3: Code Structure Validation
 
-**For Python files, verify:**
+**For Python files (`.py` and `.ipynb`), verify:**
 - Import statements are valid
 - Function signatures are correct
 - Column references use proper syntax
+- For `.ipynb` files: verify the fix was applied to the correct cell's `"source"` array in the JSON structure
 
 **For SQL files, verify:**
 - SQL syntax is valid
@@ -952,16 +1071,16 @@ for i in range(100):
 
 ### 1. SCAN all patterns
 ```bash
-# Auto-fix patterns
-grep -rn "input_file_name" ./notebooks/
-grep -rn "IF\s*!\|IS\s*!" ./notebooks/
+# Auto-fix patterns (scan .py, .ipynb, .sql, .scala)
+grep -rn "input_file_name" --include="*.py" --include="*.ipynb" --include="*.sql" --include="*.scala" ./notebooks/
+grep -rn "IF\s*!\|IS\s*!" --include="*.sql" --include="*.ipynb" ./notebooks/
 
 # Manual review patterns  
-grep -rn "createOrReplaceTempView" ./notebooks/
-grep -rn "@udf" ./notebooks/
+grep -rn "createOrReplaceTempView" --include="*.py" --include="*.ipynb" --include="*.scala" ./notebooks/
+grep -rn "@udf" --include="*.py" --include="*.ipynb" ./notebooks/
 
 # Config patterns
-grep -rn "cloudFiles" ./notebooks/
+grep -rn "cloudFiles" --include="*.py" --include="*.ipynb" ./notebooks/
 ```
 
 ### 2. Categorize findings
@@ -1030,12 +1149,46 @@ SUGGESTED FIX (copy-paste ready):
 # MAGIC ### 🔧 Assisted Fix (Review Suggested Code)
 # MAGIC | Line | BC-ID | Issue | Suggested Fix |
 # MAGIC |------|-------|-------|---------------|
-# MAGIC | 55,85 | BC-SC-002 | Temp view "batch" reused | UUID-suffixed names (see snippet) |
-# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` |
+# MAGIC | 55,85 | BC-SC-002 | Temp view "batch" reused | UUID-suffixed names (see snippet below) |
+# MAGIC | 30 | BC-17.3-002 | Auto Loader | `.option("cloudFiles.useIncrementalListing", "auto")` (see snippet below) |
+# MAGIC 
+# MAGIC ### 🔧 Suggested Fix Snippets (copy-paste ready)
+# MAGIC 
+# MAGIC #### 🔧 BC-SC-002-DUP: Temp view `"batch"` reused (lines 55, 85)
+# MAGIC 
+# MAGIC **Original (line 55):** `df_batch1.createOrReplaceTempView("batch")`
+# MAGIC **Original (line 85):** `df_batch2.createOrReplaceTempView("batch")`
+# MAGIC 
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC import uuid
+# MAGIC 
+# MAGIC # Line 55:
+# MAGIC batch_view_1 = f"batch_{uuid.uuid4().hex[:8]}"
+# MAGIC df_batch1.createOrReplaceTempView(batch_view_1)
+# MAGIC 
+# MAGIC # Line 85:
+# MAGIC batch_view_2 = f"batch_{uuid.uuid4().hex[:8]}"
+# MAGIC df_batch2.createOrReplaceTempView(batch_view_2)
+# MAGIC ```
+# MAGIC ⚠️ Also update `spark.table("batch")` and SQL references to use the new unique names.
+# MAGIC 
+# MAGIC #### 🔧 BC-17.3-002: Auto Loader incremental listing (line 30)
+# MAGIC 
+# MAGIC **Original (line 30):**
+# MAGIC ```python
+# MAGIC spark.readStream.format("cloudFiles").load(path)
+# MAGIC ```
+# MAGIC 
+# MAGIC **Replacement (copy-paste this):**
+# MAGIC ```python
+# MAGIC spark.readStream.format("cloudFiles").option("cloudFiles.useIncrementalListing", "auto").load(path)
+# MAGIC ```
+# MAGIC ℹ️ This explicitly sets Auto Loader listing behavior. Test with your data volume.
 # MAGIC 
 # MAGIC ### Next Steps
 # MAGIC 1. Run: `@databricks-dbr-migration fix all auto-fixable issues`
-# MAGIC 2. Review assisted fix snippets above and apply as appropriate
+# MAGIC 2. **Review and apply the assisted fix snippets above**
 # MAGIC 3. Test on DBR 17.3
 ```
 

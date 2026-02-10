@@ -21,6 +21,8 @@
 # MAGIC |------|-------|-------|---------------|
 # MAGIC {ASSISTED_FIX_ITEMS}
 # MAGIC 
+# MAGIC ### 🔧 Suggested Fix Snippets (copy-paste ready)
+# MAGIC 
 # MAGIC {ASSISTED_FIX_SNIPPETS}
 # MAGIC 
 # MAGIC ### 🟡 Manual Review Required
