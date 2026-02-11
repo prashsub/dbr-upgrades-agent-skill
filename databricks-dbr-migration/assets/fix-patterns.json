@@ -383,15 +383,18 @@
       "severity": "LOW",
       "category": "assisted_fix",
       "introduced_in": "15.4",
-      "description": "JDBC null calendar handling changed",
+      "description": "JDBC null calendar handling changed. Default for spark.sql.legacy.jdbc.useNullCalendar changed to true. May affect timestamp interpretation from JDBC sources.",
       "file_types": [".py", ".scala"],
       "detection": {
         "pattern": "\\.jdbc\\(|read\\.jdbc"
       },
+      "assisted_fix_snippet": "# === BC-15.4-002 Self-Test: Run on target DBR to check if fix is needed ===\n# Reads JDBC data with BOTH calendar settings and diffs the results.\n# If diff_count == 0, no fix is needed. No source database access required.\n\nspark.conf.set(\"spark.sql.legacy.jdbc.useNullCalendar\", \"true\")\ndf_new = spark.read.jdbc(\"<your_jdbc_url>\", \"<your_table>\", properties={...})\n\nspark.conf.set(\"spark.sql.legacy.jdbc.useNullCalendar\", \"false\")\ndf_old = spark.read.jdbc(\"<your_jdbc_url>\", \"<your_table>\", properties={...})\n\ndiff_count = df_new.exceptAll(df_old).count()\nprint(f\"Rows that differ: {diff_count}\")\nif diff_count == 0:\n    print(\"SAFE: No timestamp differences. No fix needed.\")\nelse:\n    print(\"FIX REQUIRED: Add spark.conf.set('spark.sql.legacy.jdbc.useNullCalendar', 'false')\")",
       "config": {
         "key": "spark.sql.legacy.jdbc.useNullCalendar",
-        "restore_value": "false"
-      }
+        "restore_value": "false",
+        "note": "Only set if self-test shows diff_count > 0"
+      },
+      "review_guidance": "Run the self-comparison test on target DBR: read the JDBC table twice with useNullCalendar=true vs false and compare with exceptAll(). If diff_count == 0, no fix needed. If > 0, set the config to false. No source database access required."
     },
     {
       "id": "BC-15.4-005",
@@ -399,12 +402,18 @@
       "severity": "LOW",
       "category": "assisted_fix",
       "introduced_in": "15.4",
-      "description": "JDBC timestamp handling may differ",
+      "description": "JDBC timestamp handling may differ. Default for spark.sql.legacy.jdbc.useNullCalendar changed to true.",
       "file_types": [".py", ".scala"],
       "detection": {
         "pattern": "\\.jdbc\\(|\\.format\\s*\\(\\s*[\"']jdbc[\"']\\s*\\)"
       },
-      "review_guidance": "Test JDBC timestamp handling on target DBR"
+      "assisted_fix_snippet": "# === BC-15.4-005 Self-Test: Run on target DBR to check if fix is needed ===\n# Reads JDBC data with BOTH calendar settings and diffs the results.\n# If diff_count == 0, no fix is needed. No source database access required.\n\nspark.conf.set(\"spark.sql.legacy.jdbc.useNullCalendar\", \"true\")\ndf_new = (spark.read.format(\"jdbc\")\n    .option(\"url\", \"<your_jdbc_url>\")\n    .option(\"dbtable\", \"<your_table>\")\n    .load()\n)\n\nspark.conf.set(\"spark.sql.legacy.jdbc.useNullCalendar\", \"false\")\ndf_old = (spark.read.format(\"jdbc\")\n    .option(\"url\", \"<your_jdbc_url>\")\n    .option(\"dbtable\", \"<your_table>\")\n    .load()\n)\n\ndiff_count = df_new.exceptAll(df_old).count()\nprint(f\"Rows that differ: {diff_count}\")\nif diff_count == 0:\n    print(\"SAFE: No timestamp differences. No fix needed.\")\nelse:\n    print(\"FIX REQUIRED: Add spark.conf.set('spark.sql.legacy.jdbc.useNullCalendar', 'false')\")",
+      "config": {
+        "key": "spark.sql.legacy.jdbc.useNullCalendar",
+        "restore_value": "false",
+        "note": "Only set if self-test shows diff_count > 0"
+      },
+      "review_guidance": "Run the self-comparison test on target DBR: read the JDBC table twice with useNullCalendar=true vs false and compare with exceptAll(). If diff_count == 0, no fix needed. If > 0, set the config to false. No source database access required."
     },
     {
       "id": "BC-16.4-003",

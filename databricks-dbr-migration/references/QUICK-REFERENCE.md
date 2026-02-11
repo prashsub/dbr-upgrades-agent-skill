@@ -131,7 +131,7 @@ A condensed reference for all breaking changes. Use this to quickly explain issu
 
 ### BC-15.4-005: JDBC Reads
 🔍 `\.jdbc\(|\.format\s*\(\s*[\"']jdbc[\"']\s*\)`  
-✅ Test JDBC timestamp handling on target DBR
+✅ Run self-comparison test (read with `useNullCalendar=true` vs `false`, diff with `exceptAll`). Fix only if diff > 0
 
 ### BC-16.4-004: MERGE materializeSource
 🔍 `merge\.materializeSource.*none`  

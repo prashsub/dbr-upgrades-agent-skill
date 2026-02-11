@@ -52,3 +52,6 @@ dmypy.json
 
 # Customer
 7-Eleven/
+
+# Cursor IDE
+.cursor/
