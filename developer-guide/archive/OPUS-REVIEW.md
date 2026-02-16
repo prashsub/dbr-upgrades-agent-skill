@@ -1,6 +1,6 @@
 # Final Audit: DBR Migration Artifacts
 
-**Scope:** Agent skill (`databricks-dbr-migration/`), demo/test notebooks (`demo/`), workspace profiler (`developer-guide/workspace-profiler.py`)  
+**Scope:** Agent skill (`databricks-dbr-migration/`), demo/test notebooks (`demo/`), workspace profiler (`workspace-profiler/workspace-profiler.py`)  
 **Date:** 2026-01-23  
 
 ---
@@ -66,7 +66,7 @@
   ...
   ### BC-17.3-005: Decimal Precision in Spark Connect
   ```
-  ```465:473:developer-guide/workspace-profiler.py
+  ```465:473:workspace-profiler/workspace-profiler.py
   id="BC-17.3-004",
   name="Spark Connect Decimal Precision",
   description="[Review] Spark Connect: decimal precision in array/map literals defaults to (38,18)",
@@ -98,7 +98,7 @@
 
 - **Profiler flags `overwriteSchema` OR `partitionOverwriteMode` (not both)**  
   The pattern intended to catch the **combination** of overwriteSchema + dynamic partitioning instead flags either term alone, which can over-report.  
-  ```288:295:developer-guide/workspace-profiler.py
+  ```288:295:workspace-profiler/workspace-profiler.py
   pattern=r"overwriteSchema.*true|partitionOverwriteMode.*dynamic",
   description="[Review] Cannot combine overwriteSchema=true with dynamic partition overwrites",
   ```
@@ -135,7 +135,7 @@
 
 - **Profiler’s BC‑SC‑001 regex is narrow and can miss common patterns**  
   The regex requires a `try:` immediately followed by a single-line transform, which can miss multi-line transforms or other error-handling idioms.  
-  ```204:211:developer-guide/workspace-profiler.py
+  ```204:211:workspace-profiler/workspace-profiler.py
   pattern=r"try\s*:\s*\n[^#]*\.(filter|select|where|withColumn|join)\s*\(",
   ```
 

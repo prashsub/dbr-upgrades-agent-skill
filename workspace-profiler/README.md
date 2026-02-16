@@ -358,9 +358,9 @@ ORDER BY occurrences DESC
 
 ## Related Documentation
 
-- [Developer Guide README](README.md) - Overall migration workflow
-- [Breaking Changes Explained](BREAKING-CHANGES-EXPLAINED.md) - Technical details on each pattern
-- [Pod Lead Validation Checklist](POD-LEAD-VALIDATION-CHECKLIST.md) - Validation procedures
+- [Developer Guide README](../developer-guide/README.md) - Overall migration workflow
+- [Breaking Changes Explained](../developer-guide/BREAKING-CHANGES-EXPLAINED.md) - Technical details on each pattern
+- [Pod Lead Validation Checklist](../developer-guide/POD-LEAD-VALIDATION-CHECKLIST.md) - Validation procedures
 
 ---
 

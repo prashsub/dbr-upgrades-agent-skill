@@ -242,7 +242,7 @@ This is not about replacing developers—it's about **augmenting human expertise
 | `databricks-dbr-migration/scripts/` | Python automation tools |
 | `developer-guide/README.md` | Step-by-step workflow guide |
 | `developer-guide/BREAKING-CHANGES-EXPLAINED.md` | Technical deep-dive on each breaking change |
-| `developer-guide/workspace-profiler.py` | Account-level scanning tool |
+| `workspace-profiler/workspace-profiler.py` | Account-level scanning tool |
 | `demo/` | Example notebooks showing before/after fixes |
 
 ---

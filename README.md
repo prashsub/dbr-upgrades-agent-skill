@@ -75,10 +75,13 @@ This agent skill helps you automatically detect and fix breaking changes when up
 │       ├── dbr_test_helpers.py
 │       └── __init__.py
 │
+├── workspace-profiler/            # 🔍 Account-level scanner
+│   ├── README.md                 # Profiler configuration & usage guide
+│   └── workspace-profiler.py     # The profiler script
+│
 ├── developer-guide/              # ⭐ Start here!
 │   ├── README.md                 # Complete workflow guide
 │   ├── BREAKING-CHANGES-EXPLAINED.md  # Detailed explanations
-│   ├── workspace-profiler.py          # Account-level scanner
 │   └── archive/                       # Detailed technical guides
 │       ├── 01-skill-setup.md
 │       ├── 02-using-assistant.md
@@ -163,7 +166,7 @@ Or use the workspace profiler to scan all jobs and notebooks:
 # Configure migration path in CONFIG:
 #   "source_dbr_version": "13.3"  # Current version (patterns <= this are skipped)
 #   "target_dbr_version": "17.3"  # Target version
-%run ./developer-guide/workspace-profiler.py
+%run ./workspace-profiler/workspace-profiler.py
 ```
 
 ### 2️⃣ **Apply Automated Fixes**
@@ -192,7 +195,7 @@ python databricks-dbr-migration/scripts/validate-migration.py \
 |----------|-------------|
 | **[Developer Guide](developer-guide/README.md)** | 🚀 **Main workflow** - Profiler → Agent → Review → Test |
 | [Breaking Changes Explained](developer-guide/BREAKING-CHANGES-EXPLAINED.md) | 📖 Every breaking change with examples |
-| [Workspace Profiler](developer-guide/workspace-profiler.py) | 🔍 Scan all jobs/notebooks in your workspace |
+| [Workspace Profiler](workspace-profiler/) | 🔍 Scan all jobs/notebooks in your workspace |
 
 ### Skill Reference
 
@@ -244,7 +247,7 @@ For deep dives into specific topics, see [developer-guide/archive/](developer-gu
 **Step 1: Run Profiler**
 ```python
 # In Databricks notebook
-%run ./developer-guide/workspace-profiler.py
+%run ./workspace-profiler/workspace-profiler.py
 # Output: List of jobs/notebooks with potential breaking changes
 ```
 

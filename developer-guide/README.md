@@ -18,7 +18,7 @@ Upgrade from DBR 13.3 LTS to 17.3 LTS using the Databricks Assistant Agent Skill
 
 ## Step 1: Run Profiler
 
-Run the [workspace-profiler.py](workspace-profiler.py) notebook to get a list of jobs with potential breaking changes.
+Run the [workspace-profiler.py](../workspace-profiler/workspace-profiler.py) notebook to get a list of jobs with potential breaking changes.
 
 ```python
 # In Databricks, run the profiler notebook
@@ -247,10 +247,10 @@ The fix on line X caused a syntax error, please review and correct
 
 ## References
 
-- **[WORKSPACE-PROFILER-README.md](WORKSPACE-PROFILER-README.md)** - Detailed profiler configuration and usage guide
+- **[Workspace Profiler README](../workspace-profiler/README.md)** - Detailed profiler configuration and usage guide
+- **[workspace-profiler.py](../workspace-profiler/workspace-profiler.py)** - Profiler script
 - **[BREAKING-CHANGES-EXPLAINED.md](BREAKING-CHANGES-EXPLAINED.md)** - Technical details on each breaking change
 - **[SKILL.md](../databricks-dbr-migration/SKILL.md)** - Agent skill definition
-- **[workspace-profiler.py](workspace-profiler.py)** - Profiler script
 
 ### External Links
 - [Databricks Runtime Release Notes](https://learn.microsoft.com/en-us/azure/databricks/release-notes/runtime/)

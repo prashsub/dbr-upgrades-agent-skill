@@ -23,7 +23,7 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 4. **VALIDATE** - Verify fixes are correct (12 critical patterns checked)
 5. **SUMMARIZE** - Add a summary markdown cell to the notebook
 
-> **Note:** The workspace profiler (`developer-guide/workspace-profiler.py`) has the most comprehensive coverage with 35 patterns. The agent scanner implements 32 regex-based patterns plus special detection for BC-SC-002 (temp view reuse).
+> **Note:** The workspace profiler (`workspace-profiler/workspace-profiler.py`) has the most comprehensive coverage with 35 patterns. The agent scanner implements 32 regex-based patterns plus special detection for BC-SC-002 (temp view reuse).
 
 ---
 
