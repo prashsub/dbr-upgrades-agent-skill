@@ -24,7 +24,7 @@
 # MAGIC | Category | Count | Action |
 # MAGIC |----------|-------|--------|
 # MAGIC | 🔴 **Auto-Fix** | 10 | Agent automatically applies fix |
-# MAGIC | 🔧 **Assisted Fix** | 11 | Agent provides fix snippet, developer reviews |
+# MAGIC | 🔧 **Assisted Fix** | 12 | Agent provides fix snippet, developer reviews |
 # MAGIC | 🟡 **Manual Review** | 10 | Agent flags for developer decision |
 # MAGIC 
 # MAGIC ### Quick Reference Table
@@ -44,6 +44,7 @@
 # MAGIC | BC-16.4-003 | 🟡 MEDIUM | Data source cache options | 16.4 | 🔧 Assisted Fix |
 # MAGIC | BC-16.4-004 | 🟢 LOW | MERGE materializeSource | 16.4 | 🔧 Assisted Fix |
 # MAGIC | BC-16.4-006 | 🟡 MEDIUM | Auto Loader cleanSource | 16.4 | 🔧 Assisted Fix |
+# MAGIC | BC-16.4-007 | 🟡 MEDIUM | DateTime pattern width (JDK 17) | 16.4 | 🔧 Assisted Fix |
 # MAGIC | BC-17.3-002 | 🟡 MEDIUM | Auto Loader incremental listing | 17.3 | 🔧 Assisted Fix |
 # MAGIC | BC-13.3-001 | 🔴 HIGH | MERGE INTO type casting (ANSI) | 13.3 | 🟡 Manual Review |
 # MAGIC | BC-16.4-002 | 🔴 HIGH | HashMap/HashSet ordering | 16.4 | 🟡 Manual Review |
@@ -1383,6 +1384,93 @@ print('spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")'
 # MAGIC %md
 # MAGIC ---
 # MAGIC 
+# MAGIC ## 🔧 BC-16.4-007: Strict DateTime Pattern Width (JDK 17) [Assisted Fix]
+# MAGIC 
+# MAGIC ### 💡 In Simple Terms
+# MAGIC 
+# MAGIC DBR 16.4 upgraded from JDK 8 to JDK 17. Java's `DateTimeFormatter` now **strictly enforces pattern width**:
+# MAGIC - `MM` = exactly 2-digit month (rejects `1`, requires `01`)
+# MAGIC - `dd` = exactly 2-digit day (rejects `9`, requires `09`)
+# MAGIC - `yy` = exactly 2-digit year (rejects `2022`, requires `22`)
+# MAGIC 
+# MAGIC In DBR 13.3 (JDK 8), `to_date(col, "MM/dd/yy")` would happily parse `"1/29/2022"`.
+# MAGIC In DBR 16.4 (JDK 17), the same call returns **NULL** — no error, just silent data loss.
+# MAGIC 
+# MAGIC ### 📖 What Changed
+# MAGIC 
+# MAGIC | Pattern | JDK 8 (DBR 13.3) | JDK 17 (DBR 16.4+) |
+# MAGIC |---------|-------------------|---------------------|
+# MAGIC | `MM` with input `1` | ✅ Parses (lenient bug) | ❌ Returns NULL (strict) |
+# MAGIC | `dd` with input `9` | ✅ Parses (lenient bug) | ❌ Returns NULL (strict) |
+# MAGIC | `yy` with input `2022` | ✅ Parses (lenient bug) | ❌ Returns NULL (strict) |
+# MAGIC | `M` with input `1` | ✅ Parses | ✅ Parses |
+# MAGIC | `d` with input `9` | ✅ Parses | ✅ Parses |
+# MAGIC | `y` with input `2022` | ✅ Parses | ✅ Parses |
+# MAGIC 
+# MAGIC **Root Cause:** JDK 8 had bugs where `DateTimeFormatter` with `ResolverStyle.STRICT` was lenient about field widths. JDK 17 fixed these bugs, making parsing truly strict.
+# MAGIC 
+# MAGIC ### 📚 Official Documentation
+# MAGIC - [Databricks Datetime Patterns](https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html)
+# MAGIC - [SPARK-31408: Build datetime pattern definition](https://issues.apache.org/jira/browse/SPARK-31408)
+# MAGIC - [DBR 16.4 Release Notes - System Environment](https://docs.databricks.com/en/release-notes/runtime/16.4lts.html)
+# MAGIC 
+# MAGIC ### 🔍 How the Agent Detects It
+# MAGIC 
+# MAGIC **Pattern:** `to_date|to_timestamp|date_format` with `MM`, `dd`, or `yy` in the format string
+# MAGIC 
+# MAGIC ### ✅ Fix
+# MAGIC 
+# MAGIC | Before (strict - breaks on variable input) | After (flexible - works on all input) |
+# MAGIC |---------------------------------------------|---------------------------------------|
+# MAGIC | `to_date(col, "MM/dd/yy")` | `to_date(col, "M/d/y")` |
+# MAGIC | `to_date(col, "MM-dd-yyyy")` | `to_date(col, "M-d-yyyy")` |
+# MAGIC | `to_timestamp(col, "MM/dd/yy HH:mm")` | `to_timestamp(col, "M/d/y HH:mm")` |
+
+# COMMAND ----------
+
+from pyspark.sql.functions import to_date, coalesce
+
+test_dates = spark.createDataFrame([
+    ("01/01/22",),     # Standard 2-digit month/day, 2-digit year
+    ("01/01/23",),     # Standard 2-digit month/day, 2-digit year
+    ("1/29/2022",),    # Single-digit month, 4-digit year
+    ("1/29/2023",),    # Single-digit month, 4-digit year
+    ("12/5/2023",),    # Single-digit day, 4-digit year
+], ["bill_date"])
+
+print("=== BC-16.4-007: Strict DateTime Pattern Width ===\n")
+
+# ❌ PROBLEM: 'MM/dd/yy' is strict in DBR 16.4+ (JDK 17)
+df_strict = test_dates.withColumn(
+    "parsed_strict", to_date(col("bill_date"), "MM/dd/yy")
+)
+print("❌ Strict pattern (MM/dd/yy) — NULLs for variable-width input on DBR 16.4+:")
+df_strict.show(truncate=False)
+
+# ✅ FIX: Use 'M/d/y' for flexible-width parsing
+df_flexible = test_dates.withColumn(
+    "parsed_flexible", to_date(col("bill_date"), "M/d/y")
+)
+print("✅ Flexible pattern (M/d/y) — All rows parse correctly:")
+df_flexible.show(truncate=False)
+
+# ✅ ALTERNATIVE FIX: Coalesce multiple patterns
+df_coalesce = test_dates.withColumn(
+    "parsed_coalesce",
+    coalesce(
+        to_date(col("bill_date"), "MM/dd/yy"),
+        to_date(col("bill_date"), "M/d/yyyy"),
+        to_date(col("bill_date"), "M/d/y")
+    )
+)
+print("✅ Coalesce fallback — Handles all formats:")
+df_coalesce.show(truncate=False)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
+# MAGIC 
 # MAGIC ## 🔧 BC-17.3-002: Auto Loader Incremental Listing [Assisted Fix]
 # MAGIC 
 # MAGIC ### 📖 What Changed
@@ -1776,7 +1864,7 @@ print(scala_example_2)
 # MAGIC | BC-16.4-001g | `.view.force` | `.view.to(List)` | .scala |
 # MAGIC | BC-16.4-001i | `'symbol` literal | `Symbol("symbol")` | .scala |
 # MAGIC 
-# MAGIC ### 🔧 Assisted Fix (11 patterns)
+# MAGIC ### 🔧 Assisted Fix (12 patterns)
 # MAGIC 
 # MAGIC Agent provides exact fix snippet in scan output. Developer reviews and decides.
 # MAGIC 
@@ -1792,6 +1880,7 @@ print(scala_example_2)
 # MAGIC | BC-16.4-003 | Cached data source reads | Commented cache config |
 # MAGIC | BC-16.4-004 | `materializeSource=none` | Replace with `"auto"` |
 # MAGIC | BC-16.4-006 | Auto Loader `cleanSource` | Commented config with test guidance |
+# MAGIC | BC-16.4-007 | `MM/dd/yy` strict width (JDK 17) | Use `M/d/y` for flexible parsing |
 # MAGIC | BC-17.3-002 | Auto Loader incremental listing | `.option("cloudFiles.useIncrementalListing", "auto")` |
 # MAGIC 
 # MAGIC ### 🟡 Manual Review (10 patterns)

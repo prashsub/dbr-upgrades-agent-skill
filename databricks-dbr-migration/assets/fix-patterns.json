@@ -12,9 +12,9 @@
   },
   "pattern_counts": {
     "auto_fix": 10,
-    "assisted_fix": 11,
+    "assisted_fix": 12,
     "manual_review": 10,
-    "total": 31
+    "total": 32
   },
   "patterns": [
     {
@@ -469,6 +469,36 @@
         "pattern": "cloudFiles\\.cleanSource"
       },
       "review_guidance": "Review file cleanup behavior and timing"
+    },
+    {
+      "id": "BC-16.4-007",
+      "name": "Strict DateTime Pattern Width (JDK 17)",
+      "severity": "MEDIUM",
+      "category": "assisted_fix",
+      "introduced_in": "16.4",
+      "description": "JDK 17 strictly enforces datetime pattern width. 'MM' requires exactly 2-digit months, 'dd' requires 2-digit days, 'yy' requires 2-digit years. Use 'M', 'd', 'y' for variable-width input.",
+      "file_types": [".py", ".sql", ".scala"],
+      "detection": {
+        "pattern": "(?:to_date|to_timestamp|date_format)\\s*\\(.*[\"'](MM[/\\-.]|dd[/\\-.]|[/\\-.]yy[\"'])"
+      },
+      "fixes": [
+        {
+          "find_regex": "MM(/)",
+          "replace": "M$1",
+          "description": "Replace strict 2-digit month with flexible"
+        },
+        {
+          "find_regex": "dd(/)",
+          "replace": "d$1",
+          "description": "Replace strict 2-digit day with flexible"
+        },
+        {
+          "find_regex": "/yy\"",
+          "replace": "/y\"",
+          "description": "Replace strict 2-digit year with flexible"
+        }
+      ],
+      "review_guidance": "Check if input data has variable-width dates (e.g., '1/9/2022' vs '01/09/22'). If all input is strictly formatted, no fix needed. See: https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html"
     },
     {
       "id": "BC-17.3-002",

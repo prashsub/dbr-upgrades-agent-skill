@@ -282,6 +282,16 @@ PATTERNS = [
         "description": "merge.materializeSource=none is no longer allowed",
         "remediation": "Remove merge.materializeSource=none configuration"
     },
+    {
+        "id": "BC-16.4-007",
+        "name": "Strict DateTime Pattern Width (JDK 17)",
+        "severity": "MEDIUM",
+        "introduced_in": "16.4",
+        "pattern": r"(?:to_date|to_timestamp|date_format)\s*\(.*[\"'](MM[/\-.]|dd[/\-.]|[/\-.]yy[\"'])",
+        "file_types": [".py", ".sql", ".scala"],
+        "description": "[Review] JDK 17 (DBR 16.4+) strictly enforces datetime pattern width. 'MM' requires exactly 2-digit months, 'dd' requires 2-digit days, 'yy' requires 2-digit years. Use 'M', 'd', 'y' for variable-width input.",
+        "remediation": "Replace strict patterns (MM/dd/yy) with flexible patterns (M/d/y) if input data may have variable-width fields. See: https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html"
+    },
     # Additional patterns from profiler
     {
         "id": "BC-13.3-003",

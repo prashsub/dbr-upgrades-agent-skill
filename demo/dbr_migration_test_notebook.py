@@ -9,7 +9,7 @@
 # MAGIC | Category | Examples | IDs Included |
 # MAGIC |----------|----------|--------------|
 # MAGIC | 🔴 Auto-Fix | 10 | BC-17.3-001, BC-15.4-003, BC-16.4-001a-i |
-# MAGIC | 🟠 Assisted Fix | 6 | BC-SC-002/003, BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-17.3-002 |
+# MAGIC | 🟠 Assisted Fix | 7 | BC-SC-002/003, BC-13.3-002, BC-15.4-002, BC-16.4-004, BC-16.4-007, BC-17.3-002 |
 # MAGIC | 🟡 Manual Review | 7 | BC-13.3-001/003, BC-15.4-001/004, BC-SC-001/004 |
 # MAGIC 
 # MAGIC ## Usage
@@ -485,6 +485,47 @@ print("BC-16.4-004: materializeSource='none' is no longer allowed - use 'auto' i
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### BC-16.4-007: Strict DateTime Pattern Width (JDK 17)
+
+# COMMAND ----------
+
+# =============================================================================
+# BC-16.4-007: [CONFIG FLAG] Strict DateTime Pattern Width (JDK 17)
+# JDK 17 strictly enforces pattern width: 'MM' = exactly 2 digits, 'M' = flexible
+# DBR 13.3 (JDK 8) was lenient; DBR 16.4 (JDK 17) is strict
+#
+# TEST: Run to_date with mixed-width input data to verify parsing
+# FIX: Use 'M/d/y' instead of 'MM/dd/yy' for variable-width input
+# =============================================================================
+from pyspark.sql.functions import to_date, coalesce
+
+test_dates = spark.createDataFrame([
+    ("01/01/22",),
+    ("01/01/23",),
+    ("1/29/2022",),    # Single-digit month, 4-digit year
+    ("1/29/2023",),
+], ["bill_date"])
+
+# ❌ PROBLEM: 'MM/dd/yy' is strict in DBR 16.4+ (JDK 17)
+# Single-digit months and 4-digit years will return NULL
+df_strict = test_dates.withColumn(
+    "parsed_strict", to_date(col("bill_date"), "MM/dd/yy")
+)
+
+# ✅ FIX: Use 'M/d/y' for flexible-width parsing
+df_flexible = test_dates.withColumn(
+    "parsed_flexible", to_date(col("bill_date"), "M/d/y")
+)
+
+print("BC-16.4-007: DateTime pattern width test")
+print("\n❌ Strict pattern (MM/dd/yy) - NULLs expected for '1/29/2022' on DBR 16.4+:")
+df_strict.show()
+print("✅ Flexible pattern (M/d/y) - All rows should parse:")
+df_flexible.show()
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### BC-17.3-002: Auto Loader Incremental Listing
 
 # COMMAND ----------
@@ -544,6 +585,7 @@ print(auto_loader_code)
 # MAGIC | BC-13.3-002 | 🟠 Assisted | Parquet timestamp | **SNIPPET** - Commented config provided |
 # MAGIC | BC-15.4-002 | 🟠 Assisted | JDBC timestamp | **SNIPPET** - Commented config provided |
 # MAGIC | BC-16.4-004 | 🟠 Assisted | MERGE source=none | **SNIPPET** - Remove or use "auto" |
+# MAGIC | BC-16.4-007 | 🟠 Assisted | DateTime pattern width | **SNIPPET** - Use M/d/y not MM/dd/yy |
 # MAGIC | BC-17.3-002 | 🟠 Assisted | Auto Loader listing | **SNIPPET** - Commented config provided |
 
 # COMMAND ----------
@@ -572,7 +614,7 @@ if HELPERS_AVAILABLE:
         "BC-17.3-001", "BC-15.4-003", "BC-15.4-001", "BC-15.4-004",
         "BC-SC-001", "BC-SC-002", "BC-SC-003", "BC-SC-004",
         "BC-13.3-001", "BC-13.3-002", "BC-13.3-003",
-        "BC-15.4-002", "BC-16.4-002", "BC-16.4-004", 
+        "BC-15.4-002", "BC-16.4-002", "BC-16.4-004", "BC-16.4-007",
         "BC-17.3-002",
         "BC-16.4-001a", "BC-16.4-001f", "BC-16.4-001i"
     ]

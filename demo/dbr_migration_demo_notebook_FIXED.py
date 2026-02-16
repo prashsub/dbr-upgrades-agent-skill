@@ -13,6 +13,7 @@
 # MAGIC | BC-15.4-003 | `IF ! EXISTS` | `IF NOT EXISTS` |
 # MAGIC | BC-15.4-001 | `VariantType()` UDF | `StringType()` + JSON |
 # MAGIC | BC-17.3-002 | Implicit incremental listing | Explicit option |
+# MAGIC | BC-16.4-007 | `MM/dd/yy` strict width | `M/d/y` flexible width |
 # MAGIC | BC-SC-002 | Same temp view name | UUID in view name |
 # MAGIC | BC-SC-003 | External variable in UDF | Function factory |
 # MAGIC | BC-SC-004 | `df.columns` in loop | Cached locally |
@@ -236,6 +237,37 @@ print(auto_loader_config_fixed)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## ✅ FIXED: DateTime Pattern Width for JDK 17 [BC-16.4-007]
+
+# COMMAND ----------
+
+# ============================================================================
+# FIX BC-16.4-007: Use flexible-width patterns (M/d/y) instead of strict (MM/dd/yy)
+# JDK 17 strictly enforces pattern width; JDK 8 was lenient
+# ============================================================================
+
+from pyspark.sql.functions import to_date, col
+
+test_dates = spark.createDataFrame([
+    ("01/01/22",),     # Standard 2-digit month/day, 2-digit year
+    ("01/01/23",),     # Standard 2-digit month/day, 2-digit year
+    ("1/29/2022",),    # Single-digit month, 4-digit year
+    ("1/29/2023",),    # Single-digit month, 4-digit year
+    ("12/5/2023",),    # Single-digit day, 4-digit year
+], ["bill_date"])
+
+# ✅ FIXED: Use 'M/d/y' (flexible width) instead of 'MM/dd/yy' (strict width)
+df_fixed = test_dates.withColumn(
+    "parsed_date", to_date(col("bill_date"), "M/d/y")
+)
+
+print("FIXED: DateTime pattern using flexible-width M/d/y")
+print("All dates parse correctly on both DBR 13.3 (JDK 8) and DBR 16.4+ (JDK 17):")
+df_fixed.show(truncate=False)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## ✅ FIXED: Temp View with UUID [BC-SC-002]
 
 # COMMAND ----------
@@ -393,6 +425,7 @@ print(f"Result columns: {len(result_fixed.columns)}")
 # MAGIC | BC-15.4-003 | `! IN`, `! BETWEEN`, `! LIKE` | `NOT IN`, `NOT BETWEEN`, `NOT LIKE` | ✅ |
 # MAGIC | BC-15.4-001 | `VariantType()` in UDF | `StringType()` + JSON | ✅ |
 # MAGIC | BC-17.3-002 | Implicit incremental listing | Explicit `.option()` | ✅ |
+# MAGIC | BC-16.4-007 | `MM/dd/yy` strict width (JDK 17) | `M/d/y` flexible width | ✅ |
 # MAGIC | BC-SC-003 | External variable capture | Function factory | ✅ |
 # MAGIC | BC-SC-004 | `df.columns` in loop | Cached in local set | ✅ |
 # MAGIC | BC-15.4-004 | Column types in VIEW | Removed type constraints | ✅ |

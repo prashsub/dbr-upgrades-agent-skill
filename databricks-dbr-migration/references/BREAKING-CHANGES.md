@@ -503,6 +503,80 @@ Review Json4s API usage and adjust for 3.7.x compatibility.
 
 ---
 
+### BC-16.4-007: Strict DateTime Pattern Width Enforcement (JDK 17)
+
+**Severity:** MEDIUM  
+**Category:** DateTime Parsing / JDK Upgrade
+
+**What Changed:**  
+DBR 16.4 upgraded from JDK 8 (Zulu 8) to JDK 17 (Zulu 17). Java's `DateTimeFormatter` in JDK 17 strictly enforces pattern width rules that JDK 8 was lenient about:
+
+- `MM` now requires exactly 2-digit months (rejects `1`, requires `01`)
+- `dd` now requires exactly 2-digit days (rejects `9`, requires `09`)
+- `yy` now requires exactly 2-digit years (rejects `2022`, requires `22`)
+
+In DBR 13.3 (JDK 8), `to_date(col, "MM/dd/yy")` would happily parse `1/29/2022` (single-digit month, 4-digit year). In DBR 16.4 (JDK 17), the same call returns NULL.
+
+**Root Cause:**  
+Spark's `DateTimeFormatterHelper` uses `ResolverStyle.STRICT` with Java's `DateTimeFormatterBuilder.appendPattern()`. JDK 8 had bugs where width enforcement was lenient despite STRICT mode. JDK 17 fixed these bugs, making parsing truly strict about field widths.
+
+Key references:
+- [SPARK-31408](https://issues.apache.org/jira/browse/SPARK-31408): Build Spark's own datetime pattern definition
+- [Databricks Datetime Patterns](https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html)
+- DBR 16.4 System Environment: `Java: Zulu17.54+21-CA`
+
+**Error Behavior:**  
+No error is thrown. Affected values silently return NULL from `to_date()` / `to_timestamp()`.
+
+**Impact:**  
+- All `to_date()`, `to_timestamp()`, `date_format()` calls using `MM`, `dd`, or `yy` patterns
+- Data with variable-width date fields (e.g., `1/9/2022` vs `01/09/22`)
+- ETL pipelines parsing dates from CSV, JSON, or external systems
+
+**Remediation:**
+
+Use single-letter patterns for flexible-width parsing:
+
+| Strict (breaks on variable input) | Flexible (works on all input) |
+|---|---|
+| `MM` (exactly 2-digit month) | `M` (1 or 2 digit month) |
+| `dd` (exactly 2-digit day) | `d` (1 or 2 digit day) |
+| `yy` (exactly 2-digit year) | `y` (flexible-width year) |
+
+Option 1: Use flexible-width patterns
+```python
+# Before (breaks in 16.4+ for single-digit months/days)
+df.withColumn("parsed", to_date(col("date_str"), "MM/dd/yy"))
+
+# After (works in all DBR versions)
+df.withColumn("parsed", to_date(col("date_str"), "M/d/y"))
+```
+
+Option 2: Use coalesce with multiple patterns
+```python
+from pyspark.sql.functions import coalesce, to_date
+
+df.withColumn("parsed",
+    coalesce(
+        to_date(col("date_str"), "MM/dd/yy"),
+        to_date(col("date_str"), "M/d/yyyy"),
+        to_date(col("date_str"), "M/d/y")
+    )
+)
+```
+
+Option 3: SQL equivalent
+```sql
+SELECT coalesce(
+    to_date(date_str, 'MM/dd/yy'),
+    to_date(date_str, 'M/d/yyyy'),
+    to_date(date_str, 'M/d/y')
+) as parsed_date
+FROM my_table
+```
+
+---
+
 ## DBR 17.3 LTS Breaking Changes
 
 ### BC-17.3-001: input_file_name Function Removed
@@ -940,4 +1014,11 @@ SET spark.sql.legacy.readFileSourceTableCacheIgnoreOptions = true;
 Auto Loader (set in readStream options, not globally):
 ```python
 .option("cloudFiles.useIncrementalListing", "auto")
+```
+
+DateTime pattern width (changed in 16.4 due to JDK 8→17 upgrade):
+```python
+# Use flexible-width patterns instead of strict:
+# 'MM/dd/yy' → 'M/d/y'   (for to_date, to_timestamp)
+to_date(col("date_str"), "M/d/y")
 ```
