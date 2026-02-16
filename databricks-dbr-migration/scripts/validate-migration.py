@@ -134,6 +134,14 @@ BREAKING_PATTERNS = [
         "severity": "LOW",
         "message": "Symbol literals deprecated - use Symbol(\"name\")"
     },
+    {
+        "id": "BC-16.4-007",
+        "name": "Strict DateTime Pattern Width (JDK 17)",
+        "pattern": r"(?:to_date|to_timestamp|date_format)\s*\(.*[\"'](MM[/\-.]|dd[/\-.]|[/\-.]yy[\"'])",
+        "file_types": [".py", ".sql", ".scala"],
+        "severity": "MEDIUM",
+        "message": "JDK 17 strictly enforces datetime pattern width. MM/dd/yy fails on variable-width input (NULL on clusters, throws on Serverless). Use coalesce(try_to_date(col, 'M/d/yyyy'), try_to_date(col, 'M/d/yy')) for mixed-format data"
+    },
 ]
 
 # Expected replacements that SHOULD exist after migration

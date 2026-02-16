@@ -515,7 +515,7 @@ DBR 16.4 upgraded from JDK 8 (Zulu 8) to JDK 17 (Zulu 17). Java's `DateTimeForma
 - `dd` now requires exactly 2-digit days (rejects `9`, requires `09`)
 - `yy` now requires exactly 2-digit years (rejects `2022`, requires `22`)
 
-In DBR 13.3 (JDK 8), `to_date(col, "MM/dd/yy")` would happily parse `1/29/2022` (single-digit month, 4-digit year). In DBR 16.4 (JDK 17), the same call returns NULL.
+In DBR 13.3 (JDK 8), `to_date(col, "MM/dd/yy")` would happily parse `1/29/2022` (single-digit month, 4-digit year). In DBR 16.4 (JDK 17), the behavior depends on the compute type.
 
 **Root Cause:**  
 Spark's `DateTimeFormatterHelper` uses `ResolverStyle.STRICT` with Java's `DateTimeFormatterBuilder.appendPattern()`. JDK 8 had bugs where width enforcement was lenient despite STRICT mode. JDK 17 fixed these bugs, making parsing truly strict about field widths.
@@ -525,52 +525,58 @@ Key references:
 - [Databricks Datetime Patterns](https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html)
 - DBR 16.4 System Environment: `Java: Zulu17.54+21-CA`
 
-**Error Behavior:**  
-No error is thrown. Affected values silently return NULL from `to_date()` / `to_timestamp()`.
+**Error Behavior (three failure modes):**
+
+| Compute Type | `to_date(col, "MM/dd/yy")` with `"1/29/2022"` | Why |
+|---|---|---|
+| Standard cluster (DBR 16.4+) | Returns **NULL** silently | ANSI mode off by default |
+| Serverless | **Throws** `CANNOT_PARSE_TIMESTAMP` | ANSI mode on by default, cannot be disabled |
+| Any (with `M/d/y` workaround) | Parses `"01/01/22"` as **0022**-01-01 | Single `y` is ambiguous about year width |
+
+> **Serverless Note:** `to_date` with a mismatched pattern throws `[CANNOT_PARSE_TIMESTAMP]` on Serverless because `spark.sql.ansi.enabled=true` is enforced and cannot be changed. Use `try_to_date` (returns NULL on failure) instead.
+
+> **Year Ambiguity Note:** `M/d/y` (single `y`) treats 2-digit input `22` as year 0022, not 2022. Always use explicit `yyyy` or `yy` for the year component.
 
 **Impact:**  
 - All `to_date()`, `to_timestamp()`, `date_format()` calls using `MM`, `dd`, or `yy` patterns
 - Data with variable-width date fields (e.g., `1/9/2022` vs `01/09/22`)
 - ETL pipelines parsing dates from CSV, JSON, or external systems
+- **Serverless users:** Hard failures instead of silent NULLs
 
 **Remediation:**
 
-Use single-letter patterns for flexible-width parsing:
+Use `try_to_date` with `coalesce` for mixed-format data (both 2-digit and 4-digit years):
 
-| Strict (breaks on variable input) | Flexible (works on all input) |
-|---|---|
-| `MM` (exactly 2-digit month) | `M` (1 or 2 digit month) |
-| `dd` (exactly 2-digit day) | `d` (1 or 2 digit day) |
-| `yy` (exactly 2-digit year) | `y` (flexible-width year) |
-
-Option 1: Use flexible-width patterns
 ```python
-# Before (breaks in 16.4+ for single-digit months/days)
-df.withColumn("parsed", to_date(col("date_str"), "MM/dd/yy"))
-
-# After (works in all DBR versions)
-df.withColumn("parsed", to_date(col("date_str"), "M/d/y"))
-```
-
-Option 2: Use coalesce with multiple patterns
-```python
-from pyspark.sql.functions import coalesce, to_date
+from pyspark.sql.functions import coalesce, try_to_date, col
 
 df.withColumn("parsed",
     coalesce(
-        to_date(col("date_str"), "MM/dd/yy"),
-        to_date(col("date_str"), "M/d/yyyy"),
-        to_date(col("date_str"), "M/d/y")
+        try_to_date(col("date_str"), "M/d/yyyy"),  # 4-digit year first
+        try_to_date(col("date_str"), "M/d/yy"),    # 2-digit year fallback
     )
 )
 ```
 
-Option 3: SQL equivalent
+Why this works:
+- `try_to_date` returns NULL on failure instead of throwing (Serverless-safe)
+- `M/d/yyyy` first: `"1/29/2022"` → 2022-01-29; `"01/01/22"` → NULL (falls through)
+- `M/d/yy` second: `"01/01/22"` → 2022-01-01
+- `M` and `d` (single letter) handle both 1-digit and 2-digit months/days
+
+**Decision matrix:**
+
+| Data format | Recommended fix |
+|---|---|
+| Only 4-digit years (e.g., `1/29/2022`) | `to_date(col, "M/d/yyyy")` |
+| Only 2-digit years (e.g., `01/01/22`) | `to_date(col, "M/d/yy")` |
+| Mixed 2-digit and 4-digit years | `coalesce(try_to_date(col, "M/d/yyyy"), try_to_date(col, "M/d/yy"))` |
+
+SQL equivalent (mixed format):
 ```sql
 SELECT coalesce(
-    to_date(date_str, 'MM/dd/yy'),
-    to_date(date_str, 'M/d/yyyy'),
-    to_date(date_str, 'M/d/y')
+    try_to_date(date_str, 'M/d/yyyy'),
+    try_to_date(date_str, 'M/d/yy')
 ) as parsed_date
 FROM my_table
 ```

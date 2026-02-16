@@ -289,8 +289,8 @@ PATTERNS = [
         "introduced_in": "16.4",
         "pattern": r"(?:to_date|to_timestamp|date_format)\s*\(.*[\"'](MM[/\-.]|dd[/\-.]|[/\-.]yy[\"'])",
         "file_types": [".py", ".sql", ".scala"],
-        "description": "[Review] JDK 17 (DBR 16.4+) strictly enforces datetime pattern width. 'MM' requires exactly 2-digit months, 'dd' requires 2-digit days, 'yy' requires 2-digit years. Use 'M', 'd', 'y' for variable-width input.",
-        "remediation": "Replace strict patterns (MM/dd/yy) with flexible patterns (M/d/y) if input data may have variable-width fields. See: https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html"
+        "description": "[Review] JDK 17 (DBR 16.4+) strictly enforces datetime pattern width. 'MM' requires exactly 2-digit months, 'dd' requires 2-digit days, 'yy' requires 2-digit years. On standard clusters: returns NULL. On Serverless (ANSI mode): throws CANNOT_PARSE_TIMESTAMP. Note: M/d/y (single y) misinterprets 2-digit years as 0022.",
+        "remediation": "For mixed 2/4-digit year data: coalesce(try_to_date(col, 'M/d/yyyy'), try_to_date(col, 'M/d/yy')). For 4-digit years only: to_date(col, 'M/d/yyyy'). For 2-digit years only: to_date(col, 'M/d/yy'). See: https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html"
     },
     # Additional patterns from profiler
     {

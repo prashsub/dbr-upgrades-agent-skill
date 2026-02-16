@@ -764,6 +764,46 @@ def apply_fixes_to_content(
             all_applied.extend(applied)
             all_warnings.extend(warnings)
     
+    # BC-16.4-007: Strict DateTime Pattern Width (JDK 17) — Assisted Fix
+    # Detects strict patterns, extracts column arg, generates coalesce(try_to_date) snippet.
+    if file_type in ['.py', '.sql', '.scala'] and should_apply_fix(fix_ids, 'BC-16.4-007'):
+        datetime_detect = re.compile(
+            r"""(?:to_date|to_timestamp|date_format)\s*\(.*["'](MM[/\-.]|dd[/\-.]|[/\-.]yy["'])"""
+        )
+        col_extract = re.compile(
+            r"""(to_date|to_timestamp|date_format)\s*\(([^,]+),"""
+        )
+        for i, line in enumerate(content.split('\n'), 1):
+            if datetime_detect.search(line):
+                col_arg = "col(\"<column>\")"
+                col_match = col_extract.search(line)
+                if col_match:
+                    col_arg = col_match.group(2).strip()
+                func_name = "to_date"
+                if col_match:
+                    func_name = col_match.group(1).strip()
+                if func_name == "date_format":
+                    snippet = f"Wrap in try_to_date before formatting: try_to_date({col_arg}, \"M/d/yyyy\")"
+                else:
+                    snippet = (
+                        f"coalesce(\n"
+                        f"        try_{func_name}({col_arg}, \"M/d/yyyy\"),\n"
+                        f"        try_{func_name}({col_arg}, \"M/d/yy\"),\n"
+                        f"    )"
+                    )
+                all_applied.append({
+                    "fix_id": "BC-16.4-007",
+                    "description": f"Strict datetime pattern at line {i}. Suggested fix:\n    {snippet}",
+                    "line": i,
+                    "original": line.strip(),
+                    "snippet": snippet
+                })
+                all_warnings.append(
+                    f"⚠️  BC-16.4-007 (line {i}): Review if data has mixed 2/4-digit years. "
+                    f"If only 4-digit: {func_name}({col_arg}, 'M/d/yyyy'). "
+                    f"If only 2-digit: {func_name}({col_arg}, 'M/d/yy')."
+                )
+    
     return content, all_applied, all_warnings
 
 
@@ -979,6 +1019,11 @@ FIX_DEFINITIONS = {
         "name": "Scala Symbol Literals",
         "file_types": [".scala"],
         "description": "Replaces 'symbol with Symbol(\"symbol\")"
+    },
+    "BC-16.4-007": {
+        "name": "Strict DateTime Pattern Width (JDK 17)",
+        "file_types": [".py", ".sql", ".scala"],
+        "description": "Assisted Fix: Generates coalesce(try_to_date) replacement snippet for strict datetime patterns. Developer reviews for year format."
     },
 }
 

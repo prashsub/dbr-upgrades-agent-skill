@@ -490,38 +490,48 @@ print("BC-16.4-004: materializeSource='none' is no longer allowed - use 'auto' i
 # COMMAND ----------
 
 # =============================================================================
-# BC-16.4-007: [CONFIG FLAG] Strict DateTime Pattern Width (JDK 17)
-# JDK 17 strictly enforces pattern width: 'MM' = exactly 2 digits, 'M' = flexible
-# DBR 13.3 (JDK 8) was lenient; DBR 16.4 (JDK 17) is strict
-#
-# TEST: Run to_date with mixed-width input data to verify parsing
-# FIX: Use 'M/d/y' instead of 'MM/dd/yy' for variable-width input
+# BC-16.4-007: [ASSISTED FIX] Strict DateTime Pattern Width (JDK 17)
+# Three failure modes:
+#   1. to_date with MM/dd/yy THROWS on Serverless (ANSI mode), NULLs on standard
+#   2. coalesce(to_date(...)) also throws on Serverless (first to_date errors)
+#   3. M/d/y (single y) misinterprets 2-digit years as 0022
+# FIX: coalesce(try_to_date(col, "M/d/yyyy"), try_to_date(col, "M/d/yy"))
 # =============================================================================
-from pyspark.sql.functions import to_date, coalesce
+from pyspark.sql.functions import to_date, try_to_date, coalesce, col
 
 test_dates = spark.createDataFrame([
     ("01/01/22",),
     ("01/01/23",),
     ("1/29/2022",),    # Single-digit month, 4-digit year
     ("1/29/2023",),
+    ("12/5/2023",),    # Single-digit day, 4-digit year
 ], ["bill_date"])
 
-# ❌ PROBLEM: 'MM/dd/yy' is strict in DBR 16.4+ (JDK 17)
-# Single-digit months and 4-digit years will return NULL
-df_strict = test_dates.withColumn(
-    "parsed_strict", to_date(col("bill_date"), "MM/dd/yy")
-)
+print("BC-16.4-007: DateTime pattern width test\n")
 
-# ✅ FIX: Use 'M/d/y' for flexible-width parsing
-df_flexible = test_dates.withColumn(
-    "parsed_flexible", to_date(col("bill_date"), "M/d/y")
-)
+# STEP 1: to_date with strict pattern — throws on Serverless
+print("STEP 1: to_date with MM/dd/yy (throws on Serverless, NULLs on standard):")
+try:
+    test_dates.withColumn("p", to_date(col("bill_date"), "MM/dd/yy")).show()
+except Exception as e:
+    print(f"  ERROR: {str(e)[:100]}...\n")
 
-print("BC-16.4-007: DateTime pattern width test")
-print("\n❌ Strict pattern (MM/dd/yy) - NULLs expected for '1/29/2022' on DBR 16.4+:")
-df_strict.show()
-print("✅ Flexible pattern (M/d/y) - All rows should parse:")
-df_flexible.show()
+# STEP 2: try_to_date — Serverless-safe, reveals NULLs
+print("STEP 2: try_to_date with MM/dd/yy (Serverless-safe — NULLs, no crash):")
+test_dates.withColumn("p", try_to_date(col("bill_date"), "MM/dd/yy")).show()
+
+# STEP 3: M/d/y — year bug (single y treats 22 as year 0022)
+print("STEP 3: to_date with M/d/y — year bug (22 becomes 0022):")
+test_dates.withColumn("p", to_date(col("bill_date"), "M/d/y")).show()
+
+# STEP 4: Correct fix — coalesce with try_to_date
+print("STEP 4: coalesce(try_to_date M/d/yyyy, try_to_date M/d/yy) — ALL correct:")
+test_dates.withColumn("p",
+    coalesce(
+        try_to_date(col("bill_date"), "M/d/yyyy"),
+        try_to_date(col("bill_date"), "M/d/yy"),
+    )
+).show()
 
 # COMMAND ----------
 
@@ -585,7 +595,7 @@ print(auto_loader_code)
 # MAGIC | BC-13.3-002 | 🟠 Assisted | Parquet timestamp | **SNIPPET** - Commented config provided |
 # MAGIC | BC-15.4-002 | 🟠 Assisted | JDBC timestamp | **SNIPPET** - Commented config provided |
 # MAGIC | BC-16.4-004 | 🟠 Assisted | MERGE source=none | **SNIPPET** - Remove or use "auto" |
-# MAGIC | BC-16.4-007 | 🟠 Assisted | DateTime pattern width | **SNIPPET** - Use M/d/y not MM/dd/yy |
+# MAGIC | BC-16.4-007 | 🟠 Assisted | DateTime pattern width | **SNIPPET** - `coalesce(try_to_date M/d/yyyy, M/d/yy)` |
 # MAGIC | BC-17.3-002 | 🟠 Assisted | Auto Loader listing | **SNIPPET** - Commented config provided |
 
 # COMMAND ----------

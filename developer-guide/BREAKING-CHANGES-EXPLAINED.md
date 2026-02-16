@@ -37,6 +37,7 @@ This guide explains each breaking change in simple terms, with examples showing:
 | [BC-17.3-002b](#bc-173-002b-auto-loader-default-behavior) | Auto Loader Default Behavior | 17.3 |
 | [BC-13.3-003](#bc-133-003-overwriteschema-with-dynamic-partition) | overwriteSchema + Dynamic Partition | 13.3 |
 | [BC-SC-002](#bc-sc-002-temp-view-name-reuse) | Temp View Name Reuse | 13.3+ |
+| [BC-16.4-007](#bc-164-007-strict-datetime-pattern-width-jdk-17) | Strict DateTime Pattern Width (JDK 17) | 16.4 |
 
 ### LOW Severity
 | ID | Name | DBR Version |
@@ -977,6 +978,107 @@ def process_batch(batch_df, batch_name):
     batch_df.createOrReplaceTempView(unique_view)
     return spark.sql(f"SELECT * FROM {unique_view}")
 ```
+
+---
+
+### BC-16.4-007: Strict DateTime Pattern Width (JDK 17)
+
+**What Changed:** DBR 16.4 upgraded from JDK 8 (Zulu 8) to JDK 17 (Zulu 17). Java's `DateTimeFormatter` now strictly enforces pattern width rules that JDK 8 was lenient about:
+- `MM` requires exactly 2-digit months (rejects `1`, requires `01`)
+- `dd` requires exactly 2-digit days (rejects `9`, requires `09`)
+- `yy` requires exactly 2-digit years (rejects `2022`, requires `22`)
+
+**Why It Matters:** This has **three failure modes** depending on the compute type and the workaround attempted:
+
+| Scenario | Standard Cluster | Serverless |
+|----------|------------------|------------|
+| `to_date(col, "MM/dd/yy")` with `"1/29/2022"` | Returns **NULL** silently | **Throws** `CANNOT_PARSE_TIMESTAMP` |
+| `coalesce(to_date(...), to_date(...))` | Returns NULL | **Throws** (first `to_date` errors before coalesce can try next) |
+| `to_date(col, "M/d/y")` with `"01/01/22"` | Parses as **0022**-01-01 | Parses as **0022**-01-01 |
+
+Serverless enforces `spark.sql.ansi.enabled=true` (cannot be disabled), which turns silent NULLs into hard errors. The `M/d/y` workaround (single `y`) is ambiguous about year width and misinterprets 2-digit years.
+
+#### ❌ The Problem
+
+```python
+from pyspark.sql.functions import to_date, col
+
+# Failure mode 1: Strict patterns reject variable-width input
+# Standard clusters: NULL | Serverless: THROWS
+df.withColumn("parsed", to_date(col("bill_date"), "MM/dd/yy"))
+
+# Failure mode 2: coalesce with to_date also throws on Serverless
+# The first to_date errors before coalesce can try the fallback
+df.withColumn("parsed",
+    coalesce(
+        to_date(col("bill_date"), "MM/dd/yy"),
+        to_date(col("bill_date"), "M/d/yyyy"),
+    )
+)
+
+# Failure mode 3: M/d/y (single y) misinterprets 2-digit years
+# "01/01/22" → 0022-01-01 (not 2022!)
+df.withColumn("parsed", to_date(col("bill_date"), "M/d/y"))
+```
+
+#### 🔍 How It's Detected
+
+```
+(?:to_date|to_timestamp|date_format)\s*\(.*["'](MM[/\-.]|dd[/\-.]|[/\-.]yy["'])
+```
+
+Matches `to_date`, `to_timestamp`, or `date_format` calls with strict-width patterns `MM`, `dd`, or `yy` in the format string.
+
+#### ✅ The Fix
+
+For **mixed data** (both 2-digit and 4-digit years like `01/01/22` and `1/29/2022`):
+
+**BEFORE:**
+```python
+df.withColumn("parsed", to_date(col("bill_date"), "MM/dd/yy"))
+```
+
+**AFTER:**
+```python
+from pyspark.sql.functions import coalesce, try_to_date, col
+
+df.withColumn("parsed",
+    coalesce(
+        try_to_date(col("bill_date"), "M/d/yyyy"),  # 4-digit year first
+        try_to_date(col("bill_date"), "M/d/yy"),    # 2-digit year fallback
+    )
+)
+```
+
+**How it works row by row:**
+
+| Input | `try_to_date(col, "M/d/yyyy")` | `try_to_date(col, "M/d/yy")` | `coalesce` result |
+|-------|-------------------------------|------------------------------|-------------------|
+| `"01/01/22"` | NULL (yyyy needs 4 digits) | 2022-01-01 | **2022-01-01** |
+| `"1/29/2022"` | 2022-01-29 | *(not evaluated)* | **2022-01-29** |
+| `"12/5/2023"` | 2023-12-05 | *(not evaluated)* | **2023-12-05** |
+
+**Why this works:**
+- `try_to_date` returns NULL instead of throwing (Serverless-safe)
+- `M/d/yyyy` first: catches 4-digit years; `M/d/yy` second: catches 2-digit years
+- `M` and `d` (single letter) accept both 1-digit and 2-digit months/days
+
+**SQL equivalent:**
+```sql
+SELECT coalesce(
+    try_to_date(date_str, 'M/d/yyyy'),
+    try_to_date(date_str, 'M/d/yy')
+) as parsed_date
+FROM my_table
+```
+
+**Decision matrix:**
+
+| Data format | Recommended fix |
+|---|---|
+| Only 4-digit years (`1/29/2022`) | `to_date(col, "M/d/yyyy")` |
+| Only 2-digit years (`01/01/22`) | `to_date(col, "M/d/yy")` |
+| Mixed 2-digit and 4-digit years | `coalesce(try_to_date(col, "M/d/yyyy"), try_to_date(col, "M/d/yy"))` |
 
 ---
 

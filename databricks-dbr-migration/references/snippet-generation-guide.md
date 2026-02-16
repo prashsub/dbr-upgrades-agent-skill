@@ -195,6 +195,37 @@ How to generate copy-paste-ready assisted fix snippets for each BC-ID finding. T
 # MAGIC **Replacement:** `{same line with "none" replaced by "auto"}`
 ```
 
+#### BC-16.4-007: DateTime Pattern Width (JDK 17)
+1. Read the `to_date`/`to_timestamp`/`date_format` call to identify the column argument and the strict format pattern
+2. Extract the actual column argument (e.g., `col("bill_date")`, `col("date_str")`, or a bare column name)
+3. Determine the function name (`to_date`, `to_timestamp`, or `date_format`)
+4. Generate a `coalesce(try_to_date)` replacement that handles mixed 2-digit/4-digit year data
+5. Add a decision note for the developer to simplify if their data has only one year format
+
+```
+# MAGIC #### 🔧 BC-16.4-007: Strict datetime pattern at line {line}
+# MAGIC
+# MAGIC **Original:** `{paste the actual to_date/to_timestamp call}`
+# MAGIC
+# MAGIC **Replacement (copy-paste this — handles mixed 2-digit/4-digit years):**
+# MAGIC ```python
+# MAGIC from pyspark.sql.functions import coalesce, try_to_date
+# MAGIC
+# MAGIC coalesce(
+# MAGIC     try_to_date({actual_col_arg}, "M/d/yyyy"),   # 4-digit year first
+# MAGIC     try_to_date({actual_col_arg}, "M/d/yy"),     # 2-digit year fallback
+# MAGIC )
+# MAGIC ```
+# MAGIC
+# MAGIC ⚠️ **Serverless note:** `to_date` throws `CANNOT_PARSE_TIMESTAMP` on Serverless (ANSI mode).
+# MAGIC `try_to_date` returns NULL instead of throwing, making it safe for `coalesce`.
+# MAGIC
+# MAGIC **Simplify if you know the year format:**
+# MAGIC - Only 4-digit years → `to_date({actual_col_arg}, "M/d/yyyy")`
+# MAGIC - Only 2-digit years → `to_date({actual_col_arg}, "M/d/yy")`
+# MAGIC - Mixed or unknown → Use the `coalesce(try_to_date)` pattern above
+```
+
 **Key rules:**
 - **NEVER use placeholder names** like `[view_name]` or `{udf_name}`. Use the ACTUAL names from the code.
 - **ALWAYS read the surrounding code** before generating a snippet. Do not guess names.

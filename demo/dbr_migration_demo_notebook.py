@@ -1394,20 +1394,19 @@ print('spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")'
 # MAGIC - `yy` = exactly 2-digit year (rejects `2022`, requires `22`)
 # MAGIC 
 # MAGIC In DBR 13.3 (JDK 8), `to_date(col, "MM/dd/yy")` would happily parse `"1/29/2022"`.
-# MAGIC In DBR 16.4 (JDK 17), the same call returns **NULL** — no error, just silent data loss.
+# MAGIC In DBR 16.4 (JDK 17), the behavior depends on the compute type — see below.
 # MAGIC 
 # MAGIC ### 📖 What Changed
 # MAGIC 
-# MAGIC | Pattern | JDK 8 (DBR 13.3) | JDK 17 (DBR 16.4+) |
-# MAGIC |---------|-------------------|---------------------|
-# MAGIC | `MM` with input `1` | ✅ Parses (lenient bug) | ❌ Returns NULL (strict) |
-# MAGIC | `dd` with input `9` | ✅ Parses (lenient bug) | ❌ Returns NULL (strict) |
-# MAGIC | `yy` with input `2022` | ✅ Parses (lenient bug) | ❌ Returns NULL (strict) |
-# MAGIC | `M` with input `1` | ✅ Parses | ✅ Parses |
-# MAGIC | `d` with input `9` | ✅ Parses | ✅ Parses |
-# MAGIC | `y` with input `2022` | ✅ Parses | ✅ Parses |
+# MAGIC | Pattern | JDK 8 (DBR 13.3) | JDK 17 - Standard Cluster | JDK 17 - Serverless |
+# MAGIC |---------|-------------------|---------------------------|---------------------|
+# MAGIC | `to_date(col, "MM/dd/yy")` with `"1/29/2022"` | ✅ Parses (lenient bug) | ❌ Returns **NULL** | ❌ **Throws** `CANNOT_PARSE_TIMESTAMP` |
+# MAGIC | `coalesce(to_date(...), to_date(...))` | ✅ Works | ❌ Returns NULL | ❌ **Throws** (first `to_date` errors before coalesce can try next) |
+# MAGIC | `to_date(col, "M/d/y")` with `"01/01/22"` | ✅ 2022-01-01 | ⚠️ **0022**-01-01 | ⚠️ **0022**-01-01 (single `y` misinterprets 2-digit years) |
 # MAGIC 
-# MAGIC **Root Cause:** JDK 8 had bugs where `DateTimeFormatter` with `ResolverStyle.STRICT` was lenient about field widths. JDK 17 fixed these bugs, making parsing truly strict.
+# MAGIC **Root Cause:** JDK 8 had bugs where `DateTimeFormatter` with `ResolverStyle.STRICT` was lenient about field widths. JDK 17 fixed these bugs. Additionally, **Serverless enforces ANSI mode** (`spark.sql.ansi.enabled=true`, cannot be disabled), which turns silent NULLs into hard errors.
+# MAGIC 
+# MAGIC > ⚠️ **Serverless Note:** On Serverless compute, `to_date` throws `CANNOT_PARSE_TIMESTAMP` instead of returning NULL. Use `try_to_date` (ANSI-safe) which returns NULL on parse failure.
 # MAGIC 
 # MAGIC ### 📚 Official Documentation
 # MAGIC - [Databricks Datetime Patterns](https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html)
@@ -1418,53 +1417,89 @@ print('spark.conf.set("spark.databricks.delta.merge.materializeSource", "auto")'
 # MAGIC 
 # MAGIC **Pattern:** `to_date|to_timestamp|date_format` with `MM`, `dd`, or `yy` in the format string
 # MAGIC 
-# MAGIC ### ✅ Fix
+# MAGIC ### ✅ Fix (for mixed 2-digit/4-digit year data)
 # MAGIC 
-# MAGIC | Before (strict - breaks on variable input) | After (flexible - works on all input) |
-# MAGIC |---------------------------------------------|---------------------------------------|
-# MAGIC | `to_date(col, "MM/dd/yy")` | `to_date(col, "M/d/y")` |
-# MAGIC | `to_date(col, "MM-dd-yyyy")` | `to_date(col, "M-d-yyyy")` |
-# MAGIC | `to_timestamp(col, "MM/dd/yy HH:mm")` | `to_timestamp(col, "M/d/y HH:mm")` |
+# MAGIC ```python
+# MAGIC from pyspark.sql.functions import coalesce, try_to_date, col
+# MAGIC df.withColumn("parsed",
+# MAGIC     coalesce(
+# MAGIC         try_to_date(col("date_str"), "M/d/yyyy"),  # 4-digit year first
+# MAGIC         try_to_date(col("date_str"), "M/d/yy"),    # 2-digit year fallback
+# MAGIC     )
+# MAGIC )
+# MAGIC ```
+# MAGIC 
+# MAGIC | Scenario | Fix |
+# MAGIC |----------|-----|
+# MAGIC | Only 4-digit years (`1/29/2022`) | `to_date(col, "M/d/yyyy")` |
+# MAGIC | Only 2-digit years (`01/01/22`) | `to_date(col, "M/d/yy")` |
+# MAGIC | Mixed 2-digit and 4-digit years | `coalesce(try_to_date(col, "M/d/yyyy"), try_to_date(col, "M/d/yy"))` |
 
 # COMMAND ----------
 
-from pyspark.sql.functions import to_date, coalesce
+# ============================================================================
+# BC-16.4-007: DATETIME PATTERN WIDTH — 4-step demonstration
+# ============================================================================
+from pyspark.sql.functions import to_date, try_to_date, coalesce, col
 
 test_dates = spark.createDataFrame([
-    ("01/01/22",),     # Standard 2-digit month/day, 2-digit year
-    ("01/01/23",),     # Standard 2-digit month/day, 2-digit year
+    ("01/01/22",),     # 2-digit month/day, 2-digit year
+    ("01/01/23",),     # 2-digit month/day, 2-digit year
     ("1/29/2022",),    # Single-digit month, 4-digit year
     ("1/29/2023",),    # Single-digit month, 4-digit year
     ("12/5/2023",),    # Single-digit day, 4-digit year
 ], ["bill_date"])
 
-print("=== BC-16.4-007: Strict DateTime Pattern Width ===\n")
+print("=" * 70)
+print("STEP 1: to_date with strict pattern MM/dd/yy")
+print("  Expected: THROWS on Serverless, NULLs on standard clusters")
+print("=" * 70)
+try:
+    df_strict = test_dates.withColumn(
+        "parsed", to_date(col("bill_date"), "MM/dd/yy")
+    )
+    df_strict.show(truncate=False)
+    print("  ^ You are on a standard cluster (NULLs for mismatched rows)\n")
+except Exception as e:
+    print(f"  ERROR (Serverless/ANSI mode): {str(e)[:120]}...")
+    print("  to_date throws instead of returning NULL when ANSI mode is on.\n")
 
-# ❌ PROBLEM: 'MM/dd/yy' is strict in DBR 16.4+ (JDK 17)
-df_strict = test_dates.withColumn(
-    "parsed_strict", to_date(col("bill_date"), "MM/dd/yy")
+# COMMAND ----------
+
+print("=" * 70)
+print("STEP 2: try_to_date with strict pattern MM/dd/yy (Serverless-safe)")
+print("  Expected: NULLs for variable-width input (no crash)")
+print("=" * 70)
+df_try = test_dates.withColumn(
+    "parsed", try_to_date(col("bill_date"), "MM/dd/yy")
 )
-print("❌ Strict pattern (MM/dd/yy) — NULLs for variable-width input on DBR 16.4+:")
-df_strict.show(truncate=False)
+df_try.show(truncate=False)
 
-# ✅ FIX: Use 'M/d/y' for flexible-width parsing
-df_flexible = test_dates.withColumn(
-    "parsed_flexible", to_date(col("bill_date"), "M/d/y")
+# COMMAND ----------
+
+print("=" * 70)
+print("STEP 3: to_date with M/d/y (single y) — year bug!")
+print("  Expected: 2-digit years become 0022, 0023 instead of 2022, 2023")
+print("=" * 70)
+df_single_y = test_dates.withColumn(
+    "parsed", to_date(col("bill_date"), "M/d/y")
 )
-print("✅ Flexible pattern (M/d/y) — All rows parse correctly:")
-df_flexible.show(truncate=False)
+df_single_y.show(truncate=False)
 
-# ✅ ALTERNATIVE FIX: Coalesce multiple patterns
-df_coalesce = test_dates.withColumn(
-    "parsed_coalesce",
+# COMMAND ----------
+
+print("=" * 70)
+print("STEP 4: coalesce(try_to_date M/d/yyyy, try_to_date M/d/yy)")
+print("  Expected: ALL rows parse correctly across all compute types")
+print("=" * 70)
+df_fixed = test_dates.withColumn(
+    "parsed",
     coalesce(
-        to_date(col("bill_date"), "MM/dd/yy"),
-        to_date(col("bill_date"), "M/d/yyyy"),
-        to_date(col("bill_date"), "M/d/y")
+        try_to_date(col("bill_date"), "M/d/yyyy"),
+        try_to_date(col("bill_date"), "M/d/yy"),
     )
 )
-print("✅ Coalesce fallback — Handles all formats:")
-df_coalesce.show(truncate=False)
+df_fixed.show(truncate=False)
 
 # COMMAND ----------
 
@@ -1880,7 +1915,7 @@ print(scala_example_2)
 # MAGIC | BC-16.4-003 | Cached data source reads | Commented cache config |
 # MAGIC | BC-16.4-004 | `materializeSource=none` | Replace with `"auto"` |
 # MAGIC | BC-16.4-006 | Auto Loader `cleanSource` | Commented config with test guidance |
-# MAGIC | BC-16.4-007 | `MM/dd/yy` strict width (JDK 17) | Use `M/d/y` for flexible parsing |
+# MAGIC | BC-16.4-007 | `MM/dd/yy` strict width (JDK 17) | `coalesce(try_to_date(col, "M/d/yyyy"), try_to_date(col, "M/d/yy"))` |
 # MAGIC | BC-17.3-002 | Auto Loader incremental listing | `.option("cloudFiles.useIncrementalListing", "auto")` |
 # MAGIC 
 # MAGIC ### 🟡 Manual Review (10 patterns)

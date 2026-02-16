@@ -77,7 +77,7 @@ This skill enables agents to **find**, **fix**, and **validate** breaking change
 4. **SHOW** before -> after: Include the original line(s) as a comment, then the fixed version
 5. **ADD** a review note: Explain what to verify before applying
 
-**REQUIRED: For the per-BC-ID template blocks and key rules, you MUST read [references/snippet-generation-guide.md](references/snippet-generation-guide.md).** Do NOT generate snippets without reading this file first. It contains the exact template format for each BC-ID (BC-SC-002, BC-SC-003, BC-SC-004, BC-17.3-005, BC-17.3-002, BC-15.4-005/BC-15.4-002, BC-13.3-002/BC-16.4-003, BC-16.4-004).
+**REQUIRED: For the per-BC-ID template blocks and key rules, you MUST read [references/snippet-generation-guide.md](references/snippet-generation-guide.md).** Do NOT generate snippets without reading this file first. It contains the exact template format for each BC-ID (BC-SC-002, BC-SC-003, BC-SC-004, BC-17.3-005, BC-17.3-002, BC-15.4-005/BC-15.4-002, BC-13.3-002/BC-16.4-003, BC-16.4-004, BC-16.4-007).
 
 ---
 
@@ -151,6 +151,7 @@ The agent analyzes the code context and produces a copy-paste-ready fix for each
 | BC-16.4-004 | `materializeSource.*none` | Replace `"none"` with `"auto"` |
 | BC-16.4-006 | Auto Loader `cleanSource` | Commented config with test-first guidance |
 | BC-17.3-002 | Auto Loader without explicit incremental | `.option("cloudFiles.useIncrementalListing", "auto")` insertion |
+| BC-16.4-007 | `to_date`/`to_timestamp` with strict-width patterns (`MM`, `dd`, `yy`) | `coalesce(try_to_date(col, "M/d/yyyy"), try_to_date(col, "M/d/yy"))` — handles mixed 2/4-digit years, Serverless-safe |
 
 ### Category 3: MANUAL REVIEW (10 patterns)
 **Action: FLAG for developer review. No fix snippet generated because the correct action depends on intent.**
@@ -221,6 +222,7 @@ The agent analyzes the code context and produces a copy-paste-ready fix for each
 | BC-15.4-006 | VIEW schema binding | Review schema evolution |
 | BC-16.4-003 | Data source cache | Set legacy cache option |
 | BC-16.4-006 | Auto Loader cleanSource | Review cleanup behavior |
+| BC-16.4-007 | DateTime strict width (JDK 17) | `coalesce(try_to_date M/d/yyyy, try_to_date M/d/yy)` |
 
 ### LOW Severity - Subtle Changes
 

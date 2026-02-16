@@ -476,29 +476,25 @@
       "severity": "MEDIUM",
       "category": "assisted_fix",
       "introduced_in": "16.4",
-      "description": "JDK 17 strictly enforces datetime pattern width. 'MM' requires exactly 2-digit months, 'dd' requires 2-digit days, 'yy' requires 2-digit years. Use 'M', 'd', 'y' for variable-width input.",
+      "description": "JDK 17 strictly enforces datetime pattern width. 'MM' requires exactly 2-digit months, 'dd' requires 2-digit days, 'yy' requires 2-digit years. Three failure modes: (1) Standard clusters return NULL silently, (2) Serverless throws CANNOT_PARSE_TIMESTAMP (ANSI mode enforced), (3) M/d/y (single y) misinterprets 2-digit years as year 0022. Use coalesce(try_to_date) with M/d/yyyy + M/d/yy for mixed-format data.",
       "file_types": [".py", ".sql", ".scala"],
       "detection": {
         "pattern": "(?:to_date|to_timestamp|date_format)\\s*\\(.*[\"'](MM[/\\-.]|dd[/\\-.]|[/\\-.]yy[\"'])"
       },
       "fixes": [
         {
-          "find_regex": "MM(/)",
-          "replace": "M$1",
-          "description": "Replace strict 2-digit month with flexible"
-        },
-        {
-          "find_regex": "dd(/)",
-          "replace": "d$1",
-          "description": "Replace strict 2-digit day with flexible"
-        },
-        {
-          "find_regex": "/yy\"",
-          "replace": "/y\"",
-          "description": "Replace strict 2-digit year with flexible"
+          "description": "Replace to_date with coalesce(try_to_date) for mixed 2/4-digit year data (Serverless-safe)",
+          "assisted_fix_snippet": "coalesce(\n    try_to_date(col(\"<column>\"), \"M/d/yyyy\"),  # 4-digit year first\n    try_to_date(col(\"<column>\"), \"M/d/yy\"),    # 2-digit year fallback\n)",
+          "notes": [
+            "try_to_date returns NULL on failure instead of throwing (required for Serverless)",
+            "M/d/yyyy must come FIRST: '1/29/2022' matches yyyy; '01/01/22' falls through to yy",
+            "M and d (single letter) accept both 1-digit and 2-digit months/days",
+            "If data has ONLY 4-digit years, simpler fix: to_date(col, 'M/d/yyyy')",
+            "If data has ONLY 2-digit years, simpler fix: to_date(col, 'M/d/yy')"
+          ]
         }
       ],
-      "review_guidance": "Check if input data has variable-width dates (e.g., '1/9/2022' vs '01/09/22'). If all input is strictly formatted, no fix needed. See: https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html"
+      "review_guidance": "Check if input data has variable-width dates AND whether it contains mixed 2-digit/4-digit years. If mixed, use coalesce(try_to_date). If only one format, use the appropriate single pattern. On Serverless, to_date throws CANNOT_PARSE_TIMESTAMP instead of returning NULL. See: https://docs.databricks.com/en/sql/language-manual/sql-ref-datetime-pattern.html"
     },
     {
       "id": "BC-17.3-002",
