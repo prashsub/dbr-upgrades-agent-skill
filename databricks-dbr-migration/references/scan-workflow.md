@@ -8,6 +8,16 @@ Step-by-step instructions for scanning code for breaking change patterns. Includ
 
 When user asks to scan code for breaking changes, follow these steps:
 
+### CRITICAL: Verify All Findings Before Reporting
+
+These rules apply to EVERY pattern, not just specific breaking changes:
+
+1. **Only report what grep actually found.** If a grep command returns zero results for a pattern, report "0 findings" for that pattern. Do NOT infer, assume, or fabricate findings based on other files, prior conversations, or general knowledge of the codebase.
+2. **Re-read matched lines in context.** After each grep match, read 3-5 lines around it to confirm the match is genuine and not a false positive from a similarly-named but unrelated construct.
+3. **Scope findings to the current file only.** Never carry over or mix findings from previously scanned files or notebooks. Each file is scanned independently.
+4. **Do not reference code that does not exist in the current file.** If you mention a function name, variable, or line number in your report, it must actually exist in the file being scanned.
+5. **When in doubt, re-run the grep.** If you are unsure whether a finding is real, re-run the grep command and inspect the output before including it in the report.
+
 ### Step 1: Identify Target Files
 
 Find all relevant files in the specified path **including subdirectories**:
@@ -99,6 +109,16 @@ grep -rn "VariantType\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
 ```bash
 grep -rn "CREATE.*VIEW.*\(.*\(INT\|STRING\|BIGINT\|DOUBLE\|NOT NULL\|DEFAULT\)" --include="*.sql" --include="*.ipynb" /path/to/scan
 ```
+
+**BC-17.3-003: Null Handling in array/map/struct Literals**
+```bash
+# Python: only match PySpark function calls (F.array, F.map, F.struct)
+grep -rn "F\.\(array\|map\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
+grep -rn "functions\.\(array\|map\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
+# Scala: match standalone calls, exclude collection method calls
+grep -rn "[^\.]\b\(array\|map\|struct\)\s*(" --include="*.scala" --include="*.ipynb" /path/to/scan
+```
+> **False-positive warning:** Do NOT use `\b(array|map|struct)\s*\(` on Python files. It matches Python's built-in `map()`, pandas `.map()`, and ThreadPool `pool.map()`, which are unrelated to Spark.
 
 ### Step 4: Search for ASSISTED FIX Patterns
 

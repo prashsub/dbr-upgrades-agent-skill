@@ -515,14 +515,29 @@
     },
     {
       "id": "BC-17.3-003",
-      "name": "Spark Connect Null Handling",
+      "name": "Spark Connect Null Handling - Python",
       "severity": "LOW",
       "category": "manual_review",
       "introduced_in": "17.3",
       "description": "Spark Connect handles null literals differently",
-      "file_types": [".py", ".scala"],
+      "file_types": [".py"],
       "detection": {
-        "pattern": "(array|map|struct)\\s*\\("
+        "pattern": "(?:F|functions|pyspark\\.sql\\.functions)\\s*\\.\\s*(array|map|struct)\\s*\\(",
+        "note": "Python-specific: matches F.array(, F.map(, F.struct( etc. Does NOT match Python built-in map(), pandas .map(), or ThreadPool .map()."
+      },
+      "review_guidance": "Handle null values explicitly in array/map/struct literals"
+    },
+    {
+      "id": "BC-17.3-003",
+      "name": "Spark Connect Null Handling - Scala",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "17.3",
+      "description": "Spark Connect handles null literals differently",
+      "file_types": [".scala"],
+      "detection": {
+        "pattern": "(?<!\\.)(?:array|map|struct)\\s*\\(",
+        "note": "Scala-specific: matches standalone array(, map(, struct( but NOT collection method calls like .map(."
       },
       "review_guidance": "Handle null values explicitly in array/map/struct literals"
     },

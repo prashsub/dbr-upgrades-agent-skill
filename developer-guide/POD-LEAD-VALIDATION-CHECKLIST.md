@@ -1,4 +1,4 @@
-# Pod Lead Validation Guide: Supporting Documentation
+# Pod Lead Validation Guide
 
 > **Version:** 1.0  
 > **Target Migration:** DBR 13.3 LTS → 17.3 LTS  
@@ -6,86 +6,60 @@
 
 ---
 
-## About This Document
-
-📋 **Working Checklist:** Use the **[One-Pager Checklist](POD-LEAD-VALIDATION-ONE-PAGER.md)** to track your validation progress.
-
-📖 **This Guide:** Provides detailed instructions and reference information for completing each section of the one-pager.
-
----
-
 ## Quick Navigation
 
-**Need help with a specific check?** Jump directly to the relevant section:
+Jump directly to the relevant section:
 
-| One-Pager Column/Section | Guide Section | Quick Link |
-|--------------------------|---------------|------------|
-| Workflow Summary | Getting started | [Section 1](#section-1-pre-validation-setup) |
-| Code ✓ | How to verify migration complete | [Section 2](#section-2-code-migration-validation) |
-| Row Count ✓ | How to compare row counts | [Section 3.1](#31-row-count-validation-all-priorities) |
-| Biz Metrics ✓ (P1) | How to validate business metrics | [Section 3.2](#32-business-metrics-validation-p1-only) |
-| Reports ✓ (P1) | How to validate downstream systems | [Section 4](#section-4-downstream-report-validation-p1-only) |
-| UAT ✓ (P1) | How to perform at-scale UAT | [Section 5](#section-5-at-scale-uat-testing-p1-only) |
-| Performance & Status | How to check performance | [Section 6](#section-6-performance-regression-testing) |
+| Validation Area | Guide Section | Quick Link |
+|-----------------|---------------|------------|
+| Getting Started | Workflow identification and categorization | [Section 1](#section-1-pre-validation-setup) |
+| Code Migration | How to verify migration complete | [Section 2](#section-2-code-migration-validation) |
+| Row Count | How to compare row counts | [Section 3.1](#31-row-count-validation-all-priorities) |
+| Business Metrics (P1) | How to validate business metrics | [Section 3.2](#32-business-metrics-validation-p1-only) |
+| Downstream Reports (P1) | How to validate downstream systems | [Section 4](#section-4-downstream-report-validation-p1-only) |
+| At-Scale UAT (P1) | How to perform at-scale UAT | [Section 5](#section-5-at-scale-uat-testing-p1-only) |
+| Performance | How to check performance | [Section 6](#section-6-performance-regression-testing) |
 | P2 Workflows | Simplified P2 process | [Section 7](#section-7-p2-workflow-validation-simplified) |
 | Final Sign-Off | Completing approvals | [Section 8](#section-8-final-sign-off-process) |
 | SQL Templates | Row count & metrics queries | [Appendix A](#appendix-a-validation-sql-templates) |
 | Troubleshooting | Common issues | [Appendix B](#appendix-b-common-issues-and-resolutions) |
-| Contacts | Who to ask for help | [Appendix C](#appendix-c-contact-information) |
 
 ---
 
 ## How to Use This Guide
 
-This document supports the **one-pager checklist** by providing:
+This is a self-contained guide covering the full validation process. It provides:
 
 - ✅ **Step-by-step instructions** for each validation type
 - ✅ **Acceptance criteria** and thresholds
 - ✅ **SQL templates** for data comparisons (Appendix A)
 - ✅ **Troubleshooting guidance** for common issues (Appendix B)
 - ✅ **Escalation procedures** for performance regressions
-- ✅ **Contact information** for getting help (Appendix C)
 
-**Workflow:** Fill out the one-pager as you go, referring to this guide when you need details on "how to" complete a specific validation step.
+Work through each section in order, confirming each validation step as you go.
 
 ---
 
 ## Section 1: Pre-Validation Setup
 
-> **One-Pager Section:** Workflow Summary
-
-### Prerequisites
-
-Before starting validation, ensure you have access to:
-
-| Resource | Purpose | Link Placeholder |
-|----------|---------|------------------|
-| Job Tracker Spreadsheet | List of all workflows to validate | `<<JOB_TRACKER_LINK>>` |
-| Sign-Off Tracker | Record validation completion | `<<SIGNOFF_TRACKER_LINK>>` |
-| Issue Tracker | Log and track problems | `<<ISSUE_TRACKER_LINK>>` |
-| UAT Environment | DBR 17.3 testing environment | `<<UAT_ENVIRONMENT>>` |
-| Baseline Metrics | Historical DBR 13.3 performance | `<<METRICS_LOCATION>>` |
-
 ### Identifying Your Workflows
 
-**Step 1:** Open the Job Tracker spreadsheet and filter by your POD name
+**Step 1:** Gather the full list of workflows assigned to your POD.
 
 **Step 2:** Count and categorize your workflows:
 - **P1 (Critical):** Production-critical, revenue-impacting, regulatory, or customer-facing
 - **P2 (Standard):** Supporting workflows with lower business impact
 - **Serverless:** Exclude these (already on compatible runtime)
 
-**Step 3:** Record the counts in the "Workflow Summary" section of your one-pager
+**Step 3:** Record the counts as your workflow summary before proceeding.
 
 ---
 
 ## Section 2: Code Migration Validation
 
-> **One-Pager Section:** P1/P2 Workflows Validation - "Code ✓" column
-
 ### What to Verify
 
-The "Code ✓" column confirms that code migration is complete and the workflow executes successfully on DBR 17.3.
+This check confirms that code migration is complete and the workflow executes successfully on DBR 17.3.
 
 ### Verification Steps
 
@@ -106,9 +80,9 @@ The "Code ✓" column confirms that code migration is complete and the workflow 
 - Ensure a second team member has reviewed the code changes
 - This provides quality assurance and knowledge sharing
 
-### What "Code ✓" Means
+### Code Migration Completion Criteria
 
-When you check this box on the one-pager, you are confirming:
+Code migration is complete when you can confirm:
 - ✅ Code migration is complete
 - ✅ Workflow runs successfully on DBR 17.3
 - ✅ No blocking errors or warnings
@@ -118,7 +92,7 @@ When you check this box on the one-pager, you are confirming:
 
 | Issue | Resolution |
 |-------|------------|
-| Job fails on DBR 17.3 | Log to Issue Tracker, work with developer to fix |
+| Job fails on DBR 17.3 | Log the issue, work with developer to fix |
 | Cluster config still on 13.3 | Update job definition to use DBR 17.3 cluster |
 | Library compatibility errors | Update library versions or find compatible alternatives |
 | Deprecation warnings in logs | Document for future cleanup (not blocking) |
@@ -127,11 +101,9 @@ When you check this box on the one-pager, you are confirming:
 
 ## Section 3: Data Quality Validation
 
-> **One-Pager Section:** P1/P2 Workflows Validation - "Row Count ✓" and "Biz Metrics ✓" columns
-
 ### 3.1 Row Count Validation (All Priorities)
 
-The "Row Count ✓" column confirms that output data volumes match exactly between DBR versions.
+This check confirms that output data volumes match exactly between DBR versions.
 
 #### What to Compare
 
@@ -174,9 +146,7 @@ See Appendix A.1 for comprehensive SQL template that compares:
 
 ### 3.2 Business Metrics Validation (P1 Only)
 
-> **One-Pager Section:** P1 Workflows Validation - "Biz Metrics ✓" column
-
-The "Biz Metrics ✓" column confirms that critical business calculations produce consistent results.
+This check confirms that critical business calculations produce consistent results.
 
 #### What Metrics to Validate
 
@@ -209,8 +179,8 @@ For P1 workflows, identify and compare key business metrics:
 #### Business Stakeholder Approval
 
 - P1 business metrics **must** be reviewed and approved by the business stakeholder
-- Document their approval in the one-pager "Sign-Off" column
-- Save evidence (screenshots, comparison reports) to the tracker
+- Document their approval alongside the validation record
+- Save evidence (screenshots, comparison reports) for audit purposes
 
 ---
 
@@ -228,8 +198,6 @@ If schema differences exist, document whether they are:
 ---
 
 ## Section 4: Downstream Report Validation (P1 Only)
-
-> **One-Pager Section:** P1 Workflows Validation - "Reports ✓" column
 
 ### Why This Matters (P1 Only)
 
@@ -277,12 +245,12 @@ For **External Systems:**
 - Check error logs for any new issues
 
 **Step 4: Document Approval**
-- Record validation in the "Reports ✓" column
-- Note the validator name in the "Sign-Off" column
+- Record the validation result and date
+- Note the validator name for each downstream consumer
 
-### What "Reports ✓" Means
+### Report Validation Completion Criteria
 
-When you check this box, you are confirming:
+Report validation is complete when you can confirm:
 - ✅ All downstream consumers identified
 - ✅ Owners notified and engaged
 - ✅ Each consumer validated and working correctly
@@ -291,8 +259,6 @@ When you check this box, you are confirming:
 ---
 
 ## Section 5: At-Scale UAT Testing (P1 Only)
-
-> **One-Pager Section:** P1 Workflows Validation - "UAT ✓" column
 
 ### Why At-Scale Testing is Required (P1 Only)
 
@@ -340,9 +306,9 @@ UAT sign-off requires approval from:
 - **Business Stakeholder:** Confirms business requirements met
 - **QA Representative:** (if applicable) Confirms quality standards met
 
-### What "UAT ✓" Means
+### UAT Completion Criteria
 
-When you check this box, you are confirming:
+UAT is complete when you can confirm:
 - ✅ UAT executed with ≥80% production data volume
 - ✅ Workflow completed successfully without errors
 - ✅ Performance within acceptable limits
@@ -362,8 +328,6 @@ Record the following for each P1 workflow:
 ---
 
 ## Section 6: Performance Regression Testing
-
-> **One-Pager Section:** P1/P2 Workflows Validation - "Performance" and "Perf Status" columns
 
 ### Why Performance Testing Matters
 
@@ -401,12 +365,12 @@ Change % = ((DBR 17.3 Duration - DBR 13.3 Duration) / DBR 13.3 Duration) × 100
 
 **Step 4: Determine Status**
 
-| Status | Threshold | Fill in One-Pager |
-|--------|-----------|-------------------|
-| **OK** | ≤10% slower or faster | Write "OK" in Perf Status |
-| **WARN** | 10-25% slower | Write "WARN" in Perf Status |
-| **CONCERN** | 25-50% slower | Write "CONCERN" in Perf Status |
-| **BLOCK** | >50% slower | Write "BLOCK" in Perf Status |
+| Status | Threshold | Action Required |
+|--------|-----------|-----------------|
+| **OK** | ≤10% slower or faster | Document and proceed |
+| **WARN** | 10-25% slower | Requires Tech Lead review |
+| **CONCERN** | 25-50% slower | Requires root cause analysis |
+| **BLOCK** | >50% slower | Must resolve before deployment |
 
 ### What Each Status Means
 
@@ -423,7 +387,7 @@ Change % = ((DBR 17.3 Duration - DBR 13.3 Duration) / DBR 13.3 Duration) × 100
 - Requires documentation of why the slowdown is acceptable
 - May be due to known Spark 4.0 behavior changes
 - Get Tech Lead review and approval
-- Document in Issues section of one-pager
+- Document the justification alongside the validation record
 
 **Example justification:**
 > "15% slower due to Spark 4.0 query optimizer changes. Acceptable tradeoff for long-term runtime support and new features."
@@ -459,7 +423,7 @@ If a workflow shows WARN, CONCERN, or BLOCK status, investigate these common cau
 | **Photon disabled** | Check cluster config | Ensure Photon is enabled if available |
 | **Data skew** | Check partition size distribution | Repartition or add salting |
 
-**For investigation assistance, contact:** Platform Team `<<PLATFORM_DL>>`
+**For investigation assistance, contact your Platform Team.**
 
 ### Required Approvals by Status
 
@@ -470,21 +434,19 @@ If a workflow shows WARN, CONCERN, or BLOCK status, investigate these common cau
 | CONCERN | Pod Lead + Tech Lead + Platform Team | Before final sign-off |
 | BLOCK | Must resolve issue first | After resolution, Platform Team approves |
 
-### What "Performance" Column Means
+### Performance Record Format
 
-Fill in the one-pager performance column with:
+For each workflow, record:
 - DBR 13.3 duration (in minutes)
 - DBR 17.3 duration (in minutes)
 - Change percentage
 - Status (OK/WARN/CONCERN/BLOCK)
 
-**Example entry:** `45min → 52min (+15.6%)` with Status: `WARN`
+**Example:** `45min → 52min (+15.6%)` — Status: `WARN`
 
 ---
 
 ## Section 7: P2 Workflow Validation (Simplified)
-
-> **One-Pager Section:** P2 Workflows Validation table
 
 ### P2 Validation Requirements
 
@@ -513,8 +475,7 @@ P2 workflows have simpler validation requirements:
 
 **Step 3: Performance (Optional)**
 - Recommended for workflows that run >30 minutes
-- Fills in same performance columns as P1
-- Use same thresholds (OK/WARN/CONCERN/BLOCK)
+- Follow the same process and thresholds as P1 (see Section 6)
 - Can skip for quick-running jobs (<30 min)
 
 **Step 4: Sign-Off**
@@ -535,8 +496,6 @@ The simplified validation balances risk with effort.
 
 ## Section 8: Final Sign-Off Process
 
-> **One-Pager Section:** Final Sign-Off and Approvals
-
 ### Sign-Off Authority
 
 Different validations require different levels of approval:
@@ -552,11 +511,11 @@ Different validations require different levels of approval:
 | **Performance (WARN)** | Pod Lead + Tech Lead | Pod Lead + Tech Lead (if checked) |
 | **Performance (CONCERN/BLOCK)** | Pod Lead + Tech Lead + Platform Team | Pod Lead + Tech Lead + Platform Team |
 
-### Completing the One-Pager Sign-Off Section
+### Final Sign-Off Checklist
 
-#### P1 Workflows Checklist
+#### P1 Workflows
 
-Work through the one-pager "Final Sign-Off" section for P1 workflows. Confirm:
+Before signing off, confirm all of the following:
 
 - ✅ All P1 workflows have checkmarks in all required columns
 - ✅ Row count validations show 0% variance
@@ -567,7 +526,7 @@ Work through the one-pager "Final Sign-Off" section for P1 workflows. Confirm:
 - ✅ No BLOCK status workflows (all must be resolved)
 - ✅ Business stakeholder reviewed and approved
 
-#### P2 Workflows Checklist
+#### P2 Workflows
 
 Confirm:
 - ✅ All P2 workflows have checkmarks in required columns (Code, Row Count)
@@ -577,12 +536,10 @@ Confirm:
 #### Issues Verification
 
 - ✅ All blocking issues resolved
-- ✅ Non-blocking issues documented in tracker
-- ✅ Issues section of one-pager filled out
+- ✅ Non-blocking issues documented
+- ✅ All issues and their resolutions recorded
 
 ### Obtaining Signatures
-
-Use the "Approvals" section of the one-pager to collect signatures:
 
 **For P1 Workflows:**
 1. **Pod Lead** (you): Sign after completing all validation
@@ -596,53 +553,27 @@ Use the "Approvals" section of the one-pager to collect signatures:
 
 After all signatures are collected:
 
-#### 1. Update Trackers
-- [ ] Update Sign-Off Tracker with completion date: `<<SIGNOFF_TRACKER_LINK>>`
+#### 1. Update Records
+- [ ] Record completion date for each workflow
 - [ ] Upload evidence (screenshots, comparison results, UAT documentation)
-- [ ] Close resolved issues in Issue Tracker
+- [ ] Close any resolved issues
 
-#### 2. Send Confirmation Email
+#### 2. Notify BAU/DevOps Team
 
-**To:** BAU/DevOps Team `<<BAU_DL>>`  
-**CC:** Platform Engineering, Tech Leads  
-**Subject:** DBR Migration Sign-Off Complete - [POD Name]
+Send a confirmation to your BAU/DevOps team and CC Platform Engineering and Tech Leads. Include the following summary:
 
-**Email Template:**
+- Total workflows validated (P1 and P2 counts)
+- Code migration status (% complete)
+- Row count validation results
+- Business metrics validation results (P1) with approver name
+- Downstream report verification results (P1)
+- At-scale UAT results (P1)
+- Performance summary (count by OK/WARN/CONCERN status)
+- Number of open issues (and whether any are blocking)
+- Confirmation that you are ready for production deployment scheduling
 
-```
-Team,
-
-This email confirms that [POD Name] has completed all validation 
-activities for the DBR 13.3 → 17.3 LTS migration.
-
-Summary:
-─────────
-Total Workflows Validated: XX
-  - P1 Workflows: XX (UAT tested, business approved)
-  - P2 Workflows: XX
-
-Validation Results:
-  ✅ Code migration: 100% complete
-  ✅ Row count validation: 100% passed
-  ✅ Business metrics validation (P1): Approved by [Name]
-  ✅ Downstream reports (P1): All verified
-  ✅ At-scale UAT (P1): All passed
-  ✅ Performance: [X OK, X WARN (approved), X CONCERN (approved)]
-
-Open Issues: X (none blocking)
-
-Sign-Off Tracker: Updated
-Attachments: One-pager with signatures, validation evidence
-
-We are ready for production deployment scheduling.
-
-Best regards,
-[Pod Lead Name]
-[Date]
-```
-
-#### 3. File Documentation
-- [ ] Save completed one-pager to shared location
+#### 3. Archive Documentation
+- [ ] Save completed validation records to shared location
 - [ ] Archive all validation evidence
 - [ ] Keep for audit purposes
 
@@ -784,23 +715,8 @@ WHERE b.row_hash IS NULL
 
 ---
 
-## Appendix C: Contact Information
-
-| Role | Contact | When to Reach |
-|------|---------|---------------|
-| Platform Team | `<<PLATFORM_DL>>` | Performance issues, cluster config |
-| BAU/DevOps | `<<BAU_DL>>` | Deployment questions, scheduling |
-| Technical Support | `<<SUPPORT_CHANNEL>>` | Breaking change questions |
-| Escalation | `<<ESCALATION_CONTACT>>` | Blocking issues, deadline concerns |
-
----
-
 ## Document History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | February 2026 | Platform Team | Initial version |
-
----
-
-*This document is maintained by the Platform Engineering team. For questions or suggestions, contact `<<PLATFORM_DL>>`.*

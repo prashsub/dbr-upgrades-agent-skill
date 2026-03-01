@@ -1310,11 +1310,19 @@ Review Json4s API usage for compatibility with 3.7.x:
 
 #### 🔍 How It's Detected
 
+**Python files** (`.py`):
 ```regex
-\b(array|map|struct)\s*\(
+(?:F|functions|pyspark\.sql\.functions)\s*\.\s*(array|map|struct)\s*\(
 ```
+Matches PySpark calls like `F.array(`, `F.map(`, `functions.struct(`.
 
-Flags literal construction for review.
+**Scala files** (`.scala`):
+```regex
+(?<!\.)(?:array|map|struct)\s*\(
+```
+Matches standalone `array(`, `map(`, `struct(` but not collection method calls like `.map(`.
+
+> **False-positive warning:** The previous regex `\b(array|map|struct)\s*\(` was too broad for Python files -- it matched Python's built-in `map()`, pandas `.map()`, and ThreadPool `pool.map()`, none of which are related to Spark Connect literal handling.
 
 #### ✅ The Fix
 
@@ -1492,7 +1500,8 @@ for col_name in cached_columns:
 | BC-17.3-001 | `\binput_file_name\s*\(` | .py, .sql, .scala |
 | BC-17.3-002 | `cloudFiles\.useIncrementalListing` | .py, .sql, .scala |
 | BC-17.3-002b | `\.format\s*\(\s*["']cloudFiles["']\s*\)` | .py, .scala |
-| BC-17.3-003 | `\b(array\|map\|struct)\s*\(` | .py, .scala |
+| BC-17.3-003 (py) | `(?:F\|functions\|pyspark\.sql\.functions)\s*\.\s*(array\|map\|struct)\s*\(` | .py |
+| BC-17.3-003 (scala) | `(?<!\.)(?:array\|map\|struct)\s*\(` | .scala |
 | BC-17.3-005 | `DecimalType\s*\(` | .py, .scala |
 | BC-16.4-001a | `import\s+scala\.collection\.JavaConverters` | .scala |
 | BC-16.4-001b | `\.to\s*\[\s*(List\|Set\|...)\s*\]` | .scala |

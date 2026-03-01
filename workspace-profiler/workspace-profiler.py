@@ -657,11 +657,21 @@ BREAKING_PATTERNS = [
     ),
     BreakingChangePattern(
         id="BC-17.3-003",
-        name="Spark Connect Literal Handling (Review)",
+        name="Spark Connect Literal Handling (Review) - Python",
         severity="LOW",
         introduced_in="17.3",
-        pattern=r"\b(array|map|struct)\s*\(",
-        file_types=[".py", ".scala"],
+        pattern=r"(?:F|functions|pyspark\.sql\.functions)\s*\.\s*(array|map|struct)\s*\(",
+        file_types=[".py"],
+        description="[Review] Spark Connect 17.3: null values preserved, decimal precision changed to (38,18)",
+        remediation="Handle nulls explicitly with coalesce(); specify decimal precision if needed"
+    ),
+    BreakingChangePattern(
+        id="BC-17.3-003",
+        name="Spark Connect Literal Handling (Review) - Scala",
+        severity="LOW",
+        introduced_in="17.3",
+        pattern=r"(?<!\.)(?:array|map|struct)\s*\(",
+        file_types=[".scala"],
         description="[Review] Spark Connect 17.3: null values preserved, decimal precision changed to (38,18)",
         remediation="Handle nulls explicitly with coalesce(); specify decimal precision if needed"
     ),
