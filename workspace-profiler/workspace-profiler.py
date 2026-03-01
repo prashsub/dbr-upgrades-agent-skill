@@ -1634,8 +1634,17 @@ def scan_duplicate_temp_views(content: str, file_type: str) -> List[Dict]:
             continue
         
         for match in temp_view_pattern.finditer(line):
-            view_name = match.group(2) or match.group(3)
-            if not view_name or view_name in ['df', 'spark', 'self', 'result', 'data']:
+            literal_name = match.group(2)   # From "name" or 'name'
+            variable_name = match.group(3)  # From bare variable
+
+            if literal_name:
+                view_name = literal_name
+            elif variable_name:
+                # Only skip common variable names, not literal string view names
+                if variable_name in ['df', 'spark', 'self', 'result', 'data']:
+                    continue
+                view_name = variable_name
+            else:
                 continue
             
             if view_name not in view_usages:
