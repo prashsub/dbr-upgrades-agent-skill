@@ -1310,11 +1310,17 @@ Review Json4s API usage for compatibility with 3.7.x:
 
 #### 🔍 How It's Detected
 
-**Python files** (`.py`):
+**Python files -- prefixed calls** (`.py`):
 ```regex
-(?:F|functions|pyspark\.sql\.functions)\s*\.\s*(array|map|struct)\s*\(
+(?:\bF|\bfunctions|pyspark\.sql\.functions)\s*\.\s*(?:array|map|struct)\s*\(
 ```
-Matches PySpark calls like `F.array(`, `F.map(`, `functions.struct(`.
+Catches all three functions when called via PySpark module prefix: `F.array(`, `F.map(`, `F.struct(`, `functions.array(`, etc. The `\b` word boundary prevents false positives like `pandasDF.map(`.
+
+**Python files -- bare `array()`/`struct()`** (`.py`):
+```regex
+(?<![.\w])(?:array|struct)\s*\(
+```
+Catches bare calls from direct imports (`from pyspark.sql.functions import array, struct`). Excludes `np.array()`, method calls like `df.struct()`, and compound names like `my_array()`. Does **not** match bare `map()` -- that is only detected via the prefixed pattern above.
 
 **Scala files** (`.scala`):
 ```regex
@@ -1322,7 +1328,7 @@ Matches PySpark calls like `F.array(`, `F.map(`, `functions.struct(`.
 ```
 Matches standalone `array(`, `map(`, `struct(` but not collection method calls like `.map(`.
 
-> **False-positive warning:** The previous regex `\b(array|map|struct)\s*\(` was too broad for Python files -- it matched Python's built-in `map()`, pandas `.map()`, and ThreadPool `pool.map()`, none of which are related to Spark Connect literal handling.
+> **False-positive warning for `map` only:** The `map` function requires a PySpark prefix in Python files because bare `map(` collides with Python's built-in `map()`, pandas `.map()`, and ThreadPool `pool.map()`. The `array` and `struct` functions do not have this collision and can be detected as bare calls.
 
 #### ✅ The Fix
 
@@ -1500,7 +1506,8 @@ for col_name in cached_columns:
 | BC-17.3-001 | `\binput_file_name\s*\(` | .py, .sql, .scala |
 | BC-17.3-002 | `cloudFiles\.useIncrementalListing` | .py, .sql, .scala |
 | BC-17.3-002b | `\.format\s*\(\s*["']cloudFiles["']\s*\)` | .py, .scala |
-| BC-17.3-003 (py) | `(?:F\|functions\|pyspark\.sql\.functions)\s*\.\s*(array\|map\|struct)\s*\(` | .py |
+| BC-17.3-003 (py prefixed) | `(?:\bF\|\bfunctions\|pyspark\.sql\.functions)\s*\.\s*(?:array\|map\|struct)\s*\(` | .py |
+| BC-17.3-003 (py bare array/struct) | `(?<![.\w])(?:array\|struct)\s*\(` | .py |
 | BC-17.3-003 (scala) | `(?<!\.)(?:array\|map\|struct)\s*\(` | .scala |
 | BC-17.3-005 | `DecimalType\s*\(` | .py, .scala |
 | BC-16.4-001a | `import\s+scala\.collection\.JavaConverters` | .scala |

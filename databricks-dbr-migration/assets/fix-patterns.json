@@ -515,15 +515,29 @@
     },
     {
       "id": "BC-17.3-003",
-      "name": "Spark Connect Null Handling - Python",
+      "name": "Spark Connect Null Handling - Python (prefixed)",
       "severity": "LOW",
       "category": "manual_review",
       "introduced_in": "17.3",
       "description": "Spark Connect handles null literals differently",
       "file_types": [".py"],
       "detection": {
-        "pattern": "(?:F|functions|pyspark\\.sql\\.functions)\\s*\\.\\s*(array|map|struct)\\s*\\(",
-        "note": "Python-specific: matches F.array(, F.map(, F.struct( etc. Does NOT match Python built-in map(), pandas .map(), or ThreadPool .map()."
+        "pattern": "(?:\\bF|\\bfunctions|pyspark\\.sql\\.functions)\\s*\\.\\s*(?:array|map|struct)\\s*\\(",
+        "note": "Catches prefixed PySpark calls: F.array(, F.map(, F.struct(, functions.array(, etc. Word boundary prevents pandasDF.map() false positives."
+      },
+      "review_guidance": "Handle null values explicitly in array/map/struct literals"
+    },
+    {
+      "id": "BC-17.3-003",
+      "name": "Spark Connect Null Handling - Python (bare array/struct)",
+      "severity": "LOW",
+      "category": "manual_review",
+      "introduced_in": "17.3",
+      "description": "Spark Connect handles null literals differently",
+      "file_types": [".py"],
+      "detection": {
+        "pattern": "(?<![.\\w])(?:array|struct)\\s*\\(",
+        "note": "Catches bare array()/struct() from direct imports. Excludes np.array(), method calls, and compound names like my_array(). Does not match bare map() to avoid Python built-in collision."
       },
       "review_guidance": "Handle null values explicitly in array/map/struct literals"
     },

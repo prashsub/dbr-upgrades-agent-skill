@@ -112,13 +112,15 @@ grep -rn "CREATE.*VIEW.*\(.*\(INT\|STRING\|BIGINT\|DOUBLE\|NOT NULL\|DEFAULT\)" 
 
 **BC-17.3-003: Null Handling in array/map/struct Literals**
 ```bash
-# Python: only match PySpark function calls (F.array, F.map, F.struct)
-grep -rn "F\.\(array\|map\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
-grep -rn "functions\.\(array\|map\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
+# Python (prefixed): catches F.array(, F.map(, F.struct(, functions.array(, etc.
+grep -rn "\bF\.\(array\|map\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
+grep -rn "\bfunctions\.\(array\|map\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
+# Python (bare array/struct): catches direct-import usage like array(col(...))
+grep -rn "^\|[^a-zA-Z0-9_.]\(array\|struct\)\s*(" --include="*.py" --include="*.ipynb" /path/to/scan
 # Scala: match standalone calls, exclude collection method calls
 grep -rn "[^\.]\b\(array\|map\|struct\)\s*(" --include="*.scala" --include="*.ipynb" /path/to/scan
 ```
-> **False-positive warning:** Do NOT use `\b(array|map|struct)\s*\(` on Python files. It matches Python's built-in `map()`, pandas `.map()`, and ThreadPool `pool.map()`, which are unrelated to Spark.
+> **False-positive warning for `map` only:** Do NOT use bare `map\s*\(` on Python files. It matches Python's built-in `map()`, pandas `.map()`, and ThreadPool `pool.map()`. Always require `F.map(` or `functions.map(` prefix. The `array` and `struct` functions do not have this collision and can be matched as bare calls.
 
 ### Step 4: Search for ASSISTED FIX Patterns
 
