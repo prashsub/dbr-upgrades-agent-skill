@@ -1502,18 +1502,29 @@ def resolve_notebook_dependencies(
     return visited
 
 
-def collect_job_notebook_dependencies(job_notebooks: List[str], verbose: bool = False) -> set:
+def collect_job_notebook_dependencies(
+    job_notebooks: List[str],
+    notebook_to_jobs_map: Dict = None,
+    verbose: bool = False
+) -> tuple:
     """
-    Collect all notebooks that are directly or indirectly referenced by job tasks.
+    Collect all notebooks that are directly or indirectly referenced by job tasks,
+    and build a mapping from each dependency notebook to the jobs that reference it.
     
     Args:
         job_notebooks: List of notebook paths from job tasks
+        notebook_to_jobs_map: Mapping of direct notebook_path → [(job_id, job_name)]
         verbose: Print progress information
     
     Returns:
-        Set of all notebook paths including dependencies
+        Tuple of (all_notebook_paths: set, dep_to_jobs: dict)
+        where dep_to_jobs maps each dependency notebook path → [(job_id, job_name)]
     """
+    if notebook_to_jobs_map is None:
+        notebook_to_jobs_map = {}
+
     all_notebooks = set()
+    dep_to_jobs = {}  # dependency_path → list of (job_id, job_name)
     max_depth = CONFIG.get("max_nested_depth", 10)
     
     if verbose:
@@ -1527,6 +1538,16 @@ def collect_job_notebook_dependencies(job_notebooks: List[str], verbose: bool = 
             verbose=verbose
         )
         all_notebooks.update(dependencies)
+
+        parent_jobs = notebook_to_jobs_map.get(notebook_path, [])
+        for dep in dependencies:
+            if dep == notebook_path:
+                continue
+            if dep not in dep_to_jobs:
+                dep_to_jobs[dep] = []
+            for entry in parent_jobs:
+                if entry not in dep_to_jobs[dep]:
+                    dep_to_jobs[dep].append(entry)
     
     if verbose:
         direct_count = len(job_notebooks)
@@ -1537,7 +1558,7 @@ def collect_job_notebook_dependencies(job_notebooks: List[str], verbose: bool = 
         print(f"     - Nested dependencies:     {nested_count}")
         print(f"     - Total notebooks to scan: {total_count}")
     
-    return all_notebooks
+    return all_notebooks, dep_to_jobs
 
 # COMMAND ----------
 
@@ -2345,52 +2366,6 @@ print("     3. Buffers are cleared, scan continues")
 initialize_batch_system(SCAN_ID, is_resume=is_resume_scan)
 print()
 
-def _build_dependency_job_mapping(
-    dependency_notebooks: set,
-    direct_job_notebooks: List[str],
-    notebook_to_jobs_map: Dict
-) -> Dict:
-    """
-    Build a mapping from dependency notebook paths to the jobs that use them.
-    
-    Dependency notebooks (found via %run / dbutils.notebook.run) are not directly 
-    listed in job tasks, so we trace them back: if notebook A is a direct job task
-    for Job X, and notebook A %run's notebook B, then notebook B is 
-    "referenced by Job X" (indirectly).
-    
-    For simplicity, we assign each dependency the union of all jobs that reference
-    any of the direct job notebooks (since dependency resolution doesn't track 
-    which specific parent triggered each dependency).
-    
-    Args:
-        dependency_notebooks: Set of notebook paths that are dependencies (not direct job tasks)
-        direct_job_notebooks: List of notebook paths that are direct job tasks
-        notebook_to_jobs_map: Mapping of direct notebook_path → [(job_id, job_name)]
-    
-    Returns:
-        Dict mapping each dependency notebook path → [(job_id, job_name)]
-    """
-    # Collect all jobs that reference any direct notebook 
-    # (since we know these dependencies came from direct job notebooks)
-    all_parent_jobs = []
-    for nb in direct_job_notebooks:
-        for entry in notebook_to_jobs_map.get(nb, []):
-            if entry not in all_parent_jobs:
-                all_parent_jobs.append(entry)
-    
-    # Each dependency notebook gets the full set of parent jobs
-    # This is a simplification - ideally we'd track exactly which parent
-    # triggered each dependency, but that requires more complex graph traversal
-    dep_mapping = {}
-    for dep_nb in dependency_notebooks:
-        # Check if this dependency is also a direct job notebook (it has its own mapping)
-        if dep_nb in notebook_to_jobs_map:
-            dep_mapping[dep_nb] = notebook_to_jobs_map[dep_nb]
-        else:
-            dep_mapping[dep_nb] = all_parent_jobs
-    
-    return dep_mapping
-
 # Collect job notebooks first if in jobs_only_mode (for filtering workspace scan)
 job_related_notebooks = None
 notebook_to_jobs_map = {}  # Initialize outside conditional block
@@ -2412,12 +2387,14 @@ if CONFIG.get("jobs_only_mode") or CONFIG.get("include_nested_notebooks"):
         print()
         print("RESOLVING NOTEBOOK DEPENDENCIES...")
         print("-" * 40)
-        job_related_notebooks = collect_job_notebook_dependencies(
-            job_notebook_paths, 
+        job_related_notebooks, dep_notebook_to_jobs = collect_job_notebook_dependencies(
+            job_notebook_paths,
+            notebook_to_jobs_map=notebook_to_jobs_map,
             verbose=CONFIG.get("verbose", True)
         )
     else:
         job_related_notebooks = set(job_notebook_paths)
+        dep_notebook_to_jobs = {}
     print()
 
 # Scan jobs
@@ -2456,12 +2433,6 @@ if CONFIG.get("include_nested_notebooks") and job_related_notebooks:
     nested_notebooks = job_related_notebooks - already_scanned_in_jobs
     
     if nested_notebooks:
-        # Build dependency-aware mapping: for each dependency notebook, 
-        # trace back which jobs ultimately reference it through the dependency chain
-        dep_notebook_to_jobs = _build_dependency_job_mapping(
-            nested_notebooks, job_notebook_paths, notebook_to_jobs_map
-        )
-        
         nested_results = scan_job_notebooks_with_dependencies(
             scan_id=SCAN_ID,
             job_notebooks=list(nested_notebooks),
